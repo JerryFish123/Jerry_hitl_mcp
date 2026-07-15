@@ -5,6 +5,14 @@
   "type": "module",
   "license": "MIT",
   "author": "hitl-gate-mcp contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JerryFish123/hitl-gate-mcp.git"
+  },
+  "homepage": "https://github.com/JerryFish123/hitl-gate-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/JerryFish123/hitl-gate-mcp/issues"
+  },
   "keywords": [
     "mcp",
     "model-context-protocol",
