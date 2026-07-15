@@ -24,8 +24,8 @@
     "elicitation"
   ],
   "bin": {
-    "hitl-gate-mcp": "./dist/index.js",
-    "hitl_mcp": "./dist/index.js"
+    "hitl-gate-mcp": "dist/index.js",
+    "hitl_mcp": "dist/index.js"
   },
   "files": [
     "dist",
