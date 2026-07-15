@@ -1,0 +1,49 @@
+{
+  "name": "hitl-gate-mcp",
+  "version": "0.3.1",
+  "description": "Human-in-the-Loop approval gate MCP for Cursor (elicitation + optional local web panel)",
+  "type": "module",
+  "license": "MIT",
+  "author": "hitl-gate-mcp contributors",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "hitl",
+    "human-in-the-loop",
+    "cursor",
+    "approval",
+    "agent-safety",
+    "elicitation"
+  ],
+  "bin": {
+    "hitl-gate-mcp": "./dist/index.js",
+    "hitl_mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "builtin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && npm run copy:public",
+    "copy:public": "mkdir -p dist/web && rm -rf dist/web/public && cp -R src/web/public dist/web/public && rm -rf dist/builtin && cp -R builtin dist/builtin",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js",
+    "panel": "node dist/web/standalone.js",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "smoke": "npm run build && node dist/smoke.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0"
+  }
+}

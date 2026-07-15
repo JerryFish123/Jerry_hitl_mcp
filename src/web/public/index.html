@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>hitl_mcp · 审批面板</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>hitl_mcp</h1>
+        <p class="sub">Human-in-the-Loop 审批门 · 仅本机 127.0.0.1</p>
+      </div>
+      <div class="tabs" id="tabs">
+        <button data-filter="pending" class="active">待审</button>
+        <button data-filter="all">全部</button>
+        <button data-filter="approved">已批准</button>
+        <button data-filter="rejected">已拒绝</button>
+        <button data-filter="expired">已过期</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="list-view">
+        <div id="list" class="list"></div>
+        <p id="empty" class="empty hidden">暂无工单</p>
+      </section>
+
+      <section id="detail-view" class="hidden">
+        <button id="back" class="linkish">← 返回列表</button>
+        <article id="card" class="card"></article>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
