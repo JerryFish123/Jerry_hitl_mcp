@@ -7,11 +7,11 @@
   "author": "hitl-gate-mcp contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JerryFish123/hitl-gate-mcp.git"
+    "url": "git+https://github.com/JerryFish123/Jerry_hitl_mcp.git"
   },
-  "homepage": "https://github.com/JerryFish123/hitl-gate-mcp#readme",
+  "homepage": "https://github.com/JerryFish123/Jerry_hitl_mcp#readme",
   "bugs": {
-    "url": "https://github.com/JerryFish123/hitl-gate-mcp/issues"
+    "url": "https://github.com/JerryFish123/Jerry_hitl_mcp/issues"
   },
   "keywords": [
     "mcp",

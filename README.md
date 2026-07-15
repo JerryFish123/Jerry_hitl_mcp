@@ -44,8 +44,8 @@ npm install -g hitl-gate-mcp
 在项目根目录执行：
 
 ```bash
-git clone <your-repo-url> hitl-gate-mcp
-cd hitl-gate-mcp
+git clone https://github.com/JerryFish123/Jerry_hitl_mcp.git
+cd Jerry_hitl_mcp
 npm install
 npm run build
 ```
