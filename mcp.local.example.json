@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "hitl_mcp": {
+      "command": "node",
+      "args": ["/ABS/PATH/TO/Jerry_hitl_mcp/dist/index.js"],
+      "env": {
+        "HITL_DATA_DIR": "/ABS/PATH/TO/Jerry_hitl_mcp/data",
+        "HITL_ELICIT": "1",
+        "HITL_ENABLE_PANEL": "0"
+      }
+    }
+  }
+}
