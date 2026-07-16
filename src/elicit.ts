@@ -1,7 +1,8 @@
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import type { ElicitRequestFormParams } from "@modelcontextprotocol/sdk/types.js";
 import type { ApprovalStore } from "./store.js";
 import type { ApprovalTicket } from "./types.js";
-import { buildApprovalBrief } from "./riskCopy.js";
+import { buildApprovalBrief, buildElicitApprovalForm } from "./riskCopy.js";
 
 export type ElicitOutcome =
   | { ok: true; mode: "client"; ticket: ApprovalTicket; risk_brief_zh: string }
@@ -31,30 +32,15 @@ export async function elicitApprovalDecision(
     return { ok: true, mode: "client", ticket: current, risk_brief_zh };
   }
 
-  const { message, risk_brief_zh } = buildApprovalBrief(current);
+  const { message, requestedSchema, risk_brief_zh } =
+    buildElicitApprovalForm(current);
 
   try {
     const result = await mcp.elicitInput({
       mode: "form",
       message,
-      requestedSchema: {
-        type: "object",
-        properties: {
-          decision: {
-            type: "string",
-            title: "您的决定",
-            description: "请选择是否允许 Agent 继续执行上述操作",
-            enum: ["approve", "reject"],
-            enumNames: ["审批通过并继续执行", "拒绝（不执行）"],
-          },
-          reason: {
-            type: "string",
-            title: "备注（可选）",
-            description: "拒绝时可填写原因，便于审计记录",
-          },
-        },
-        required: ["decision"],
-      },
+      requestedSchema:
+        requestedSchema as ElicitRequestFormParams["requestedSchema"],
     });
 
     if (result.action === "accept") {

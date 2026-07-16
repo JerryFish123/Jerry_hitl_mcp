@@ -72,7 +72,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "hitl_mcp",
-    version: "0.4.1",
+    version: "0.4.2",
   });
 
   server.tool(

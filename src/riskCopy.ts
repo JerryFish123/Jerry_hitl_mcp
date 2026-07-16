@@ -66,24 +66,22 @@ function matchedIdsFromTicket(ticket: ApprovalTicket): string[] {
     .filter(Boolean);
 }
 
-function formatParamsBrief(params: Record<string, unknown>): string | null {
-  const skip = new Set([
-    "matched_rules",
-    "intent",
-    "params_hash",
-  ]);
-  const parts: string[] = [];
+function formatParamsLines(params: Record<string, unknown>): string[] {
+  const skip = new Set(["matched_rules", "intent", "params_hash"]);
+  const lines: string[] = [];
   for (const [k, v] of Object.entries(params)) {
     if (skip.has(k) || v == null) continue;
     if (Array.isArray(v)) {
-      parts.push(`${k}: ${v.slice(0, 5).join(", ")}${v.length > 5 ? "…" : ""}`);
+      lines.push(
+        `${k}: ${v.slice(0, 5).join(", ")}${v.length > 5 ? "…" : ""}`,
+      );
     } else if (typeof v === "object") {
-      parts.push(`${k}: ${JSON.stringify(v).slice(0, 120)}`);
+      lines.push(`${k}: ${JSON.stringify(v).slice(0, 120)}`);
     } else {
-      parts.push(`${k}: ${String(v)}`);
+      lines.push(`${k}: ${String(v)}`);
     }
   }
-  return parts.length ? parts.join("\n") : null;
+  return lines;
 }
 
 function expiresHint(expiresAt: string): string {
@@ -93,15 +91,22 @@ function expiresHint(expiresAt: string): string {
   return `本工单约 ${min} 分钟内有效；过期后需重新申请。`;
 }
 
-export interface ApprovalBrief {
-  message: string;
-  risk_brief_zh: string;
+export interface ApprovalSections {
+  operation: string;
+  paramsLines: string[];
+  riskType: string;
+  riskLevel: string;
+  riskLabel: string;
+  otherRules: string | null;
+  impact: string;
+  ifApproved: string;
+  ticketId: string;
+  expiresHint: string;
 }
 
-/**
- * Shared copy for IDE elicitation popup and assess_and_gate tool response.
- */
-export function buildApprovalBrief(ticket: ApprovalTicket): ApprovalBrief {
+export function buildApprovalSections(
+  ticket: ApprovalTicket,
+): ApprovalSections {
   const matchedIds = matchedIdsFromTicket(ticket);
   const rule = pickPrimaryRule(matchedIds, ticket.risk);
   const impact =
@@ -110,46 +115,155 @@ export function buildApprovalBrief(ticket: ApprovalTicket): ApprovalBrief {
     "if_approved_zh" in rule && rule.if_approved_zh
       ? rule.if_approved_zh
       : FALLBACK_IF_APPROVED;
-  const paramsBrief = formatParamsBrief(ticket.params);
   const otherRules =
     matchedIds.length > 1
       ? matchedIds
           .filter((id) => id !== ("id" in rule ? rule.id : ""))
           .map((id) => getRuleById(id)?.title ?? id)
           .join("、")
-      : "";
+      : null;
 
-  const riskLabel = RISK_LABEL_ZH[ticket.risk] ?? ticket.risk;
-
-  const message = [
-    "⚠️ HITL 人工审批确认",
-    "",
-    "【本次操作】",
-    ticket.summary,
-    ...(paramsBrief ? ["", "关键参数：", paramsBrief] : []),
-    "",
-    "【危险性】",
-    `类型：${rule.title}`,
-    `等级：${ticket.risk.toUpperCase()} — ${riskLabel}`,
-    ...(otherRules ? [`还匹配：${otherRules}`] : []),
-    "",
-    "【若不拦截的后果】",
+  return {
+    operation: ticket.summary,
+    paramsLines: formatParamsLines(ticket.params),
+    riskType: rule.title,
+    riskLevel: ticket.risk.toUpperCase(),
+    riskLabel: RISK_LABEL_ZH[ticket.risk] ?? ticket.risk,
+    otherRules,
     impact,
-    "",
-    "【审批通过意味着】",
     ifApproved,
-    "",
-    `工单：${ticket.ticket_id}`,
-    expiresHint(ticket.expires_at),
-    "",
-    "请在下方选择「拒绝（不执行）」或「审批通过并继续执行」。",
+    ticketId: ticket.ticket_id,
+    expiresHint: expiresHint(ticket.expires_at),
+  };
+}
+
+function joinBlocks(blocks: string[]): string {
+  return blocks.filter(Boolean).join("\n\n");
+}
+
+function formatParamsBlock(lines: string[]): string {
+  if (!lines.length) return "";
+  return lines.map((line) => `• ${line}`).join("\n");
+}
+
+function formatRiskBlock(sections: ApprovalSections): string {
+  const lines = [
+    `类型：${sections.riskType}`,
+    `等级：${sections.riskLevel} — ${sections.riskLabel}`,
+  ];
+  if (sections.otherRules) {
+    lines.push(`还匹配：${sections.otherRules}`);
+  }
+  return lines.join("\n");
+}
+
+function formatTicketBlock(sections: ApprovalSections): string {
+  return joinBlocks([
+    `工单：${sections.ticketId}`,
+    sections.expiresHint,
     "关闭弹窗或未选择视为拒绝；未批准前 Agent 不得执行副作用。",
-  ].join("\n");
+  ]);
+}
+
+export interface ApprovalBrief {
+  message: string;
+  risk_brief_zh: string;
+}
+
+/** Read-only info block for MCP form elicitation (Cursor renders each field separately). */
+function infoField(title: string, text: string): Record<string, unknown> {
+  return {
+    type: "string",
+    title,
+    default: text,
+    readOnly: true,
+  };
+}
+
+export interface ElicitApprovalForm {
+  message: string;
+  requestedSchema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required: string[];
+  };
+  risk_brief_zh: string;
+}
+
+/**
+ * Structured form for IDE elicitation: short header + labeled read-only sections.
+ */
+export function buildElicitApprovalForm(
+  ticket: ApprovalTicket,
+): ElicitApprovalForm {
+  const sections = buildApprovalSections(ticket);
+  const paramsBlock = formatParamsBlock(sections.paramsLines);
+
+  const properties: Record<string, unknown> = {
+    _section_operation: infoField("【本次操作】", sections.operation),
+    ...(paramsBlock
+      ? { _section_params: infoField("【关键参数】", paramsBlock) }
+      : {}),
+    _section_risk: infoField("【危险性】", formatRiskBlock(sections)),
+    _section_impact: infoField("【若不拦截的后果】", sections.impact),
+    _section_approve: infoField("【审批通过意味着】", sections.ifApproved),
+    _section_ticket: infoField("【工单信息】", formatTicketBlock(sections)),
+    decision: {
+      type: "string",
+      title: "您的决定",
+      description: "请选择是否允许 Agent 继续执行上述操作",
+      enum: ["approve", "reject"],
+      enumNames: ["审批通过并继续执行", "拒绝（不执行）"],
+    },
+    reason: {
+      type: "string",
+      title: "备注（可选）",
+      description: "拒绝时可填写原因，便于审计记录",
+    },
+  };
 
   const risk_brief_zh = [
-    `【${rule.title}】风险 ${ticket.risk}`,
-    `后果：${impact}`,
-    `若批准：${ifApproved}`,
+    `【${sections.riskType}】风险 ${ticket.risk}`,
+    `后果：${sections.impact}`,
+    `若批准：${sections.ifApproved}`,
+  ].join("\n");
+
+  return {
+    message: "⚠️ HITL 人工审批确认",
+    requestedSchema: {
+      type: "object",
+      properties,
+      required: ["decision"],
+    },
+    risk_brief_zh,
+  };
+}
+
+/**
+ * Plain-text fallback (double newlines between blocks for clients that only show message).
+ */
+export function buildApprovalBrief(ticket: ApprovalTicket): ApprovalBrief {
+  const sections = buildApprovalSections(ticket);
+  const paramsBlock = formatParamsBlock(sections.paramsLines);
+
+  const message = joinBlocks([
+    "⚠️ HITL 人工审批确认",
+    joinBlocks([
+      "【本次操作】",
+      sections.operation,
+      paramsBlock ? joinBlocks(["【关键参数】", paramsBlock]) : "",
+      joinBlocks(["【危险性】", formatRiskBlock(sections)]),
+      joinBlocks(["【若不拦截的后果】", sections.impact]),
+      joinBlocks(["【审批通过意味着】", sections.ifApproved]),
+      joinBlocks(["【工单信息】", formatTicketBlock(sections)]),
+    ]),
+    "请在下方选择「拒绝（不执行）」或「审批通过并继续执行」。",
+  ]);
+
+  const risk_brief_zh = [
+    `【${sections.riskType}】风险 ${ticket.risk}`,
+    `后果：${sections.impact}`,
+    `若批准：${sections.ifApproved}`,
   ].join("\n");
 
   return { message, risk_brief_zh };
