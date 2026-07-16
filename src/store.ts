@@ -143,7 +143,7 @@ export class ApprovalStore {
   resolve(
     ticketId: string,
     decision: "approved" | "rejected",
-    opts?: { reason?: string; decided_by?: "web" | "cli" | "cursor" },
+    opts?: { reason?: string; decided_by?: "web" | "cli" | "cursor" | "client" },
   ): ApprovalTicket {
     this.syncFromDisk();
     const current = this.get(ticketId);

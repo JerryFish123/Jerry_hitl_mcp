@@ -81,8 +81,8 @@ if (!rejected.must_stop || rejected.status !== "rejected") {
 }
 
 const history = listApprovalHistory(store, { limit: 10 });
-if (Number(history.shown) < 2 || !String(history.summary_zh).includes("已批准")) {
-  throw new Error("list_approval_history failed");
+if (Number(history.shown) < 2 || !String(history.summary_zh).includes("|")) {
+  throw new Error("list_approval_history table failed");
 }
 
 console.log("smoke ok", {

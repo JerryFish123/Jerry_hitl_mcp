@@ -36,5 +36,6 @@
 3. 仅 `approved` 可执行（优先 dry-run）；`rejected` / `expired` → 停止  
 4. 若仍 `pending`：按 `user_prompt_zh` 提示；可选面板见 `panel_url`  
 5. 可用 **`list_dangerous_ops`** 查看内置表  
+6. 用户要看 **审批记录 / 审批历史** 时，调用 **`list_approval_history`**，在对话里展示 `summary_zh`（Markdown 表格：时间、操作人、审批人、状态、原因等）
 
 外置 Cursor Skill（`hitl-gate`）负责提醒 Agent **必须走上述流程**。

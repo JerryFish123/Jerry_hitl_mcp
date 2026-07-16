@@ -66,18 +66,18 @@ async function main(): Promise<void> {
     }
   } else {
     console.error(
-      "[hitl_mcp] web panel OFF (default). Approval via Cursor elicitation. Set HITL_ENABLE_PANEL=1 to enable.",
+      "[hitl_mcp] web panel OFF (default). Approval via IDE elicitation. Set HITL_ENABLE_PANEL=1 to enable.",
     );
   }
 
   const server = new McpServer({
     name: "hitl_mcp",
-    version: "0.3.1",
+    version: "0.4.1",
   });
 
   server.tool(
     "assess_and_gate",
-    "BUILTIN POLICY: Assess risk; if dangerous, create a ticket and request approval via Cursor in-IDE form (MCP elicitation). Returns approved/rejected when user decides in Cursor. Fallback: pending + chat/panel instructions. Call BEFORE side effects. Do NOT execute while pending/rejected.",
+    "BUILTIN POLICY: Assess risk; if dangerous, create a ticket and request approval via IDE form (MCP elicitation) with detailed risk copy. Returns approved/rejected when user decides. Fallback: pending + chat/panel. Call BEFORE side effects. Do NOT execute while pending/rejected.",
     {
       intent: z
         .string()
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
 
   server.tool(
     "request_approval",
-    "Manually request human approval (skip assessment). Uses Cursor elicitation when available. Prefer assess_and_gate for normal flow.",
+    "Manually request human approval (skip assessment). Uses IDE elicitation when available. Prefer assess_and_gate for normal flow.",
     {
       action: z.string().describe("Action name, e.g. delete_files"),
       summary: z.string().describe("One-line human-readable summary"),
@@ -164,17 +164,19 @@ async function main(): Promise<void> {
           if (outcome.ok) {
             return textResult({
               ...ticketPublicView(store, outcome.ticket),
-              approval_channel: "cursor",
+              approval_channel: "client",
+              risk_brief_zh: outcome.risk_brief_zh,
               message:
                 outcome.ticket.status === "approved"
-                  ? "Approved in Cursor. Agent may proceed."
-                  : "Rejected/cancelled in Cursor. Agent must stop.",
+                  ? "Approved in IDE. Agent may proceed."
+                  : "Rejected/cancelled in IDE. Agent must stop.",
             });
           }
           return textResult({
             ...created,
             approval_channel: panelEnabled() ? "panel" : "pending",
             elicit_error: outcome.reason,
+            risk_brief_zh: outcome.risk_brief_zh,
           });
         }
 
@@ -215,7 +217,7 @@ async function main(): Promise<void> {
 
   server.tool(
     "list_approval_history",
-    "List approval audit history for the user. Call when the user asks to 看审批记录 / view approval history / audit log. Present summary_zh in chat. Optional status filter and limit.",
+    "List approval audit history. Call when user asks 看审批记录. Returns summary_zh as markdown TABLE (time, ticket, action, summary, risk, requester, approver, status, reason). Present summary_zh in chat.",
     {
       status: historyStatusSchema
         .optional()

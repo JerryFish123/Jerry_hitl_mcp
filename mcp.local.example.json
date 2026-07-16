@@ -2,9 +2,9 @@
   "mcpServers": {
     "hitl_mcp": {
       "command": "node",
-      "args": ["/ABS/PATH/TO/Jerry_hitl_mcp/dist/index.js"],
+      "args": ["/绝对路径/到/本项目/dist/index.js"],
       "env": {
-        "HITL_DATA_DIR": "/ABS/PATH/TO/Jerry_hitl_mcp/data",
+        "HITL_DATA_DIR": "/绝对路径/到/本项目/data",
         "HITL_ELICIT": "1",
         "HITL_ENABLE_PANEL": "0"
       }

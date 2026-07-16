@@ -99,7 +99,7 @@ npm run build
 ### 查看审批记录
 
 对 Agent 说：**「看审批记录」**。  
-会调用 **`list_approval_history`**，并在对话里展示摘要。
+会调用 **`list_approval_history`**，并在对话里以 **Markdown 表格**展示（时间、操作类型、申请人、审批人、状态、原因等）。
 
 ### 可用工具
 

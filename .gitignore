@@ -7,3 +7,6 @@ data/
 .env.*
 *.local
 .npmrc
+
+# 本地开发待办，不提交
+todolist.md

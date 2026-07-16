@@ -20,7 +20,7 @@ export interface ApprovalTicket {
   expires_at: string;
   decided_at?: string;
   decision_reason?: string;
-  decided_by?: "web" | "cli" | "cursor";
+  decided_by?: "web" | "cli" | "cursor" | "client";
 }
 
 export interface CreateApprovalInput {
