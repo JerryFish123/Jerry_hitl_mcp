@@ -1,0 +1,28 @@
+---
+description: 危险操作必须先走 hitl_mcp；默认在 IDE 内弹表单审批，不依赖浏览器
+alwaysApply: true
+---
+
+# HITL 强制闸门（IDE 内审批）
+
+本仓库已启用 `hitl_mcp`（npm: `hitl-gate-mcp`）。用户不必说「按 hitl-gate」。
+
+## 强制规则
+
+在执行任何可能不可逆/有副作用的操作之前，必须：
+
+1. 先调用 MCP **`assess_and_gate`**。
+2. 调用期间用户应在 **IDE 弹出的审批表单**里选择批准或拒绝。
+3. 根据工具返回结果：
+   - `ticket.status === "approved"` / `can_execute === true` → 可继续（优先 dry-run）
+   - `rejected` / `must_stop` → 停止并说明
+   - 仍 `pending` → 粘贴 `user_prompt_zh`，**立即停止副作用**，等用户处理后再 `get_approval_status`
+4. 不确定是否危险时，仍先 `assess_and_gate`。
+5. 用户说「看审批记录 / 审批历史」时：调用 **`list_approval_history`**，把 `summary_zh` 展示在对话里。
+
+## 禁止
+
+- 跳过 `assess_and_gate` 直接删改/部署。
+- 在 pending/rejected 时执行副作用。
+- 用聊天口头「可以」代替工单 `approved`（除非工具已返回 approved）。
+- 强制 `open` 浏览器（面板默认关闭；仅 `HITL_ENABLE_PANEL=1` 时才有 `panel_url`）。

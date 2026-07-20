@@ -1,7 +1,7 @@
 {
   "name": "hitl-gate-mcp",
-  "version": "0.6.3",
-  "description": "Human-in-the-Loop approval gate MCP for Cursor (elicitation + optional local web panel)",
+  "version": "0.7.0",
+  "description": "Human-in-the-Loop approval gate MCP (elicitation + optional panel; init installs IDE Rule/Skill)",
   "type": "module",
   "license": "MIT",
   "author": "hitl-gate-mcp contributors",
@@ -30,6 +30,7 @@
   "files": [
     "dist",
     "builtin",
+    "templates",
     "README.md",
     "LICENSE"
   ],
@@ -39,6 +40,7 @@
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "panel": "node dist/web/standalone.js",
+    "init": "node dist/index.js init",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "smoke": "npm run build && node dist/smoke.js"

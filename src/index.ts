@@ -17,6 +17,8 @@ import {
 import { getSharedStore } from "./store.js";
 import { startPanelServer } from "./web/server.js";
 import { elicitApprovalDecision } from "./elicit.js";
+import { SERVER_INSTRUCTIONS } from "./serverInstructions.js";
+import { cliInitMain } from "./cli/init.js";
 
 const riskSchema = z.enum(["low", "medium", "high", "critical"]);
 const historyStatusSchema = z.enum([
@@ -71,14 +73,17 @@ async function main(): Promise<void> {
     );
   }
 
-  const server = new McpServer({
-    name: "hitl_mcp",
-    version: "0.6.3",
-  });
+  const server = new McpServer(
+    {
+      name: "hitl_mcp",
+      version: "0.7.0",
+    },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
 
   server.tool(
     "assess_and_gate",
-    "Assess intent + code_context; 5-tier risk. ONLY high/critical trigger HITL. When gate_required, returns blast_radius brief in ticket + elicitation. After approved execution, call submit_execution_report.",
+    "REQUIRED before side effects (delete files/.env, force-push, DROP, prod deploy, npm publish, curl|bash, etc.). Assess intent + code_context; 5-tier risk; ONLY high/critical open IDE approval. Do NOT execute until approved. After execution call submit_execution_report. When unsure, still call this tool.",
     {
       intent: z
         .string()
@@ -250,7 +255,7 @@ async function main(): Promise<void> {
 
   server.tool(
     "submit_execution_report",
-    "After ticket is approved and Agent executed changes: submit actual_files + verify_runs. Returns plan vs actual comparison summary_zh and params hash check.",
+    "REQUIRED after approved execution finishes: submit actual_files + verify_runs (+ params_hash). Returns plan vs actual summary_zh; show it to the user. Rejects duplicate submissions.",
     {
       ticket_id: z.string(),
       actual_files: z.array(z.string()).optional(),
@@ -288,7 +293,7 @@ async function main(): Promise<void> {
 
   server.tool(
     "list_approval_history",
-    "List approval audit history. Returns summary_zh markdown TABLE with closure column (案卷/对照). Present summary_zh in chat.",
+    "Call when user asks 看审批记录 / approval history / audit. Returns summary_zh markdown TABLE (含案卷/对照). MUST present summary_zh in chat; do not invent records.",
     {
       status: historyStatusSchema
         .optional()
@@ -315,6 +320,25 @@ async function main(): Promise<void> {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+const argv = process.argv.slice(2);
+if (argv[0] === "init") {
+  process.exit(cliInitMain(argv.slice(1)));
+}
+if (argv[0] === "--help" || argv[0] === "-h") {
+  console.log(`hitl-gate-mcp — HITL approval gate MCP
+
+  (no args)     Start MCP server on stdio (used by IDE mcp.json)
+  init [opts]   Install Cursor Rule/Skill templates into a project
+  --help        Show help
+
+Typical setup:
+  1) mcp.json: npx -y hitl-gate-mcp
+  2) In project: hitl-gate-mcp init
+     (or: npx hitl-gate-mcp init)
+`);
+  process.exit(0);
 }
 
 main().catch((err) => {

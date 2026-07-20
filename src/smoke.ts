@@ -16,6 +16,8 @@ import {
   submitExecutionReport,
 } from "./service.js";
 import { buildBlastRadiusBrief, buildExecutionComparison, pathsMatch } from "./blastRadius.js";
+import { runInit } from "./cli/init.js";
+import { SERVER_INSTRUCTIONS } from "./serverInstructions.js";
 
 function uniqForSmoke(items: string[]): string[] {
   return [...new Set(items)].sort();
@@ -215,10 +217,35 @@ if (!String(history.summary_zh).includes("案卷/对照")) {
   throw new Error("history table should include closure column");
 }
 
+if (!SERVER_INSTRUCTIONS.includes("assess_and_gate")) {
+  throw new Error("server instructions missing assess_and_gate");
+}
+
+const initDir = fs.mkdtempSync(path.join(os.tmpdir(), "hitl-init-"));
+const initDry = runInit({ cwd: initDir, dryRun: true });
+if (!initDry.ok || initDry.written.length < 2) {
+  throw new Error("init dry-run should plan rule+skill");
+}
+const initReal = runInit({ cwd: initDir });
+if (!initReal.ok || initReal.written.length < 2) {
+  throw new Error("init should write rule+skill");
+}
+if (
+  !fs.existsSync(path.join(initDir, ".cursor/rules/hitl-auto-gate.mdc")) ||
+  !fs.existsSync(path.join(initDir, ".cursor/skills/hitl-gate/SKILL.md"))
+) {
+  throw new Error("init files missing on disk");
+}
+const initSkip = runInit({ cwd: initDir });
+if (initSkip.skipped.length < 2) {
+  throw new Error("init without --force should skip existing files");
+}
+
 console.log("smoke ok", {
   dataDir,
   assessed: ticket.ticket_id,
   rejected: t2.ticket_id,
   catalog: ops.count,
   history_shown: history.shown,
+  init_written: initReal.written.length,
 });

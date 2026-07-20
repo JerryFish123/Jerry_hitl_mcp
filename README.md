@@ -1,16 +1,18 @@
 # hitl-gate-mcp
 
-给 AI Agent 用的 **Human-in-the-Loop 审批门 MCP**：危险操作先评估、再在 Cursor 里点选批准/拒绝，并可在对话中查看审批记录。
+给 AI Agent 用的 **Human-in-the-Loop 审批门 MCP**：危险操作先评估、再在 IDE 里点选批准/拒绝，并可在对话中查看审批记录。
 
 - 运行时：Node.js ≥ 18  
 - 传输：stdio MCP  
-- 默认审批：Cursor 内建表单（MCP elicitation），无需浏览器  
+- 默认审批：IDE 内建表单（MCP elicitation），无需浏览器  
 
 ---
 
-## 方式一：npm / npx（包发布后推荐）
+## 推荐接入（两步）
 
-在 Cursor 打开 **Settings → MCP**，编辑 `mcp.json`：
+### ① 配置 MCP（让工具连上）
+
+在 Cursor / 兼容客户端打开 **Settings → MCP**，编辑 `mcp.json`：
 
 ```json
 {
@@ -27,15 +29,41 @@
 }
 ```
 
-保存后确认 `hitl_mcp` 为已连接（绿灯）。
+保存后确认 `hitl_mcp` 为已连接（绿灯）。  
+连接后 Client 会收到 Server **`instructions`**（软提醒：副作用前先 `assess_and_gate`）。
 
-也可全局安装：
+### ② 手动 init（装上 Rule / Skill，提高遵从率）
+
+在**目标项目根目录**执行（二选一，都很短）：
+
+```bash
+hitl-gate-mcp init
+```
+
+或尚未全局安装时：
+
+```bash
+npx hitl-gate-mcp init
+```
+
+会写入：
+
+- `.cursor/rules/hitl-auto-gate.mdc`
+- `.cursor/skills/hitl-gate/SKILL.md`
+
+已存在则跳过；覆盖加 `--force`。预览用 `--dry-run`。
+
+**一次装好命令（推荐，之后到处都能用短命令）：**
 
 ```bash
 npm install -g hitl-gate-mcp
+# 之后任意项目：
+hitl-gate-mcp init
 ```
 
-然后把 `command` / `args` 改成直接调用 `hitl-gate-mcp`（或仍用上面的 `npx` 写法）。
+> **诚实边界**：只配 MCP、不跑 `init` → 依赖模型遵从 `instructions`，**不保证**每次都调闸门。  
+> `init` 装上 Rule/Skill 后，遵从率明显更高。  
+> MCP **不能**拦截 IDE 原生 Delete/Terminal。
 
 ---
 
@@ -134,7 +162,7 @@ npm run build
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `HITL_ELICIT` | `1` | 是否使用 Cursor 内审批表单 |
+| `HITL_ELICIT` | `1` | 是否使用 IDE 内审批表单 |
 | `HITL_ENABLE_PANEL` | `0` | 是否启用本机网页备用面板 |
 | `HITL_DATA_DIR` | `./data` | 审批数据目录（建议绝对路径） |
 | `HITL_PANEL_PORT` | `8787` | 面板端口（仅开启面板时） |
