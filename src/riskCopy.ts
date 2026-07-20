@@ -1,6 +1,7 @@
 import type { ApprovalTicket } from "./types.js";
 import {
   formatBlastRadiusBlock,
+  formatBlastRadiusSections,
   parseBlastRadiusFromTicket,
 } from "./blastRadius.js";
 import {
@@ -9,19 +10,27 @@ import {
   type DangerousOpRule,
 } from "./policy.js";
 import type { RiskLevel } from "./types.js";
-import { formatRiskDisplay, riskRank, type RiskLevelOrNone } from "./riskLabels.js";
+import {
+  formatRiskDisplay,
+  formatRiskTierZh,
+  riskRank,
+  type RiskLevelOrNone,
+} from "./riskLabels.js";
 
 export const RISK_LABEL_ZH: Record<RiskLevel, string> = {
-  critical: "致命危险 — 可能造成不可逆损失或大范围影响",
-  high: "高危险 — 可能丢失数据、破坏环境或产生难以回滚的副作用",
-  medium: "中危险 — 有一定副作用，建议确认范围后再执行",
-  low: "低危险 — 影响相对有限",
+  critical: "可能造成不可逆损失或大范围影响",
+  high: "可能丢失数据、破坏环境或产生难以回滚的副作用",
+  medium: "有一定副作用，建议确认范围后再执行",
+  low: "影响相对有限",
 };
 
 const FALLBACK_IMPACT =
   "若未拦截，Agent 可能对项目、数据或外部环境产生不可预期的修改。";
 const FALLBACK_IF_APPROVED =
-  "您点「审批通过并继续执行」后，Agent 将按上述摘要继续执行该操作；未批准前不会执行。";
+  "批准后 Agent 将继续执行；未批准前不会执行。";
+
+/** Cursor form fields truncate long single-line text — keep form copy short. */
+const FORM_TEXT_MAX = 96;
 
 const GENERIC_RULE: Pick<
   DangerousOpRule,
@@ -84,7 +93,7 @@ function formatParamsLines(params: Record<string, unknown>): string[] {
         `${k}: ${v.slice(0, 5).join(", ")}${v.length > 5 ? "…" : ""}`,
       );
     } else if (typeof v === "object") {
-      lines.push(`${k}: ${JSON.stringify(v).slice(0, 120)}`);
+      lines.push(`${k}: ${JSON.stringify(v).slice(0, 80)}`);
     } else {
       lines.push(`${k}: ${String(v)}`);
     }
@@ -96,7 +105,24 @@ function expiresHint(expiresAt: string): string {
   const ms = Date.parse(expiresAt) - Date.now();
   if (Number.isNaN(ms) || ms <= 0) return "工单可能已接近或已过有效期。";
   const min = Math.max(1, Math.round(ms / 60_000));
-  return `本工单约 ${min} 分钟内有效；过期后需重新申请。`;
+  return `约 ${min} 分钟内有效`;
+}
+
+function clipFormText(text: string, max = FORM_TEXT_MAX): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= max) return oneLine;
+  return `${oneLine.slice(0, max - 1)}…`;
+}
+
+/** Bullet list for form: one path per line (Cursor may flatten; still best-effort). */
+function formatPathList(paths: string[], empty = "• （无）"): string {
+  if (!paths.length) return empty;
+  const shown = paths.slice(0, 6);
+  const lines = shown.map((p) => `• ${p}`);
+  if (paths.length > shown.length) {
+    lines.push(`• …另 ${paths.length - shown.length} 项`);
+  }
+  return lines.join("\n");
 }
 
 export interface ApprovalSections {
@@ -104,6 +130,7 @@ export interface ApprovalSections {
   paramsLines: string[];
   riskType: string;
   riskLevel: string;
+  riskTierZh: string;
   riskLabel: string;
   otherRules: string | null;
   impact: string;
@@ -136,6 +163,7 @@ export function buildApprovalSections(
     paramsLines: formatParamsLines(ticket.params),
     riskType: rule.title,
     riskLevel: formatRiskDisplay(ticket.risk as RiskLevelOrNone),
+    riskTierZh: formatRiskTierZh(ticket.risk as RiskLevelOrNone),
     riskLabel: RISK_LABEL_ZH[ticket.risk] ?? ticket.risk,
     otherRules,
     impact,
@@ -162,7 +190,12 @@ function formatRiskBlock(sections: ApprovalSections): string {
   if (sections.otherRules) {
     lines.push(`还匹配：${sections.otherRules}`);
   }
+  lines.push(`说明：${sections.riskLabel}`);
   return lines.join("\n");
+}
+
+function riskSectionTitle(sections: ApprovalSections): string {
+  return `⛔ 危险性 · ${sections.riskTierZh}`;
 }
 
 function formatTicketBlock(sections: ApprovalSections): string {
@@ -173,16 +206,28 @@ function formatTicketBlock(sections: ApprovalSections): string {
   ]);
 }
 
+function formatWhatBlock(sections: ApprovalSections): string {
+  const params = formatParamsBlock(sections.paramsLines);
+  return params
+    ? `${sections.operation}\n${params}`
+    : sections.operation;
+}
+
 export interface ApprovalBrief {
   message: string;
   risk_brief_zh: string;
 }
 
 /** Read-only info block for MCP form elicitation (Cursor renders each field separately). */
-function infoField(title: string, text: string): Record<string, unknown> {
+function infoField(
+  title: string,
+  text: string,
+  description?: string,
+): Record<string, unknown> {
   return {
     type: "string",
     title,
+    ...(description ? { description } : {}),
     default: text,
     readOnly: true,
   };
@@ -199,40 +244,66 @@ export interface ElicitApprovalForm {
 }
 
 /**
- * Structured form for IDE elicitation: short header + labeled read-only sections.
+ * Structured form for IDE elicitation.
+ * Hierarchy: what → risk → consequence → blast paths → means → decide.
+ * Keep field count low so decision stays on screen; skip noisy heuristic tests.
  */
 export function buildElicitApprovalForm(
   ticket: ApprovalTicket,
 ): ElicitApprovalForm {
   const sections = buildApprovalSections(ticket);
-  const paramsBlock = formatParamsBlock(sections.paramsLines);
-
   const blast = parseBlastRadiusFromTicket(ticket);
+  const blastSections = blast ? formatBlastRadiusSections(blast) : null;
   const blastBlock = blast ? formatBlastRadiusBlock(blast) : null;
 
+  const plannedPaths = blast?.planned_files ?? [];
+  const extraAffected = (blast?.affected_files ?? []).filter(
+    (f) => !plannedPaths.includes(f),
+  );
+
+  const blastFields: Record<string, unknown> = {};
+  if (blastSections) {
+    blastFields._section_blast_planned = infoField(
+      "爆炸半径 · 拟改",
+      formatPathList(plannedPaths, "• （未提供路径）"),
+      blastSections.note,
+    );
+    if (extraAffected.length) {
+      blastFields._section_blast_affected = infoField(
+        "爆炸半径 · 可能波及",
+        formatPathList(extraAffected),
+      );
+    }
+  }
+
   const properties: Record<string, unknown> = {
-    _section_operation: infoField("【本次操作】", sections.operation),
-    ...(paramsBlock
-      ? { _section_params: infoField("【关键参数】", paramsBlock) }
-      : {}),
-    ...(blastBlock
-      ? { _section_blast_radius: infoField("【爆炸半径案卷】", blastBlock) }
-      : {}),
-    _section_risk: infoField("【危险性】", formatRiskBlock(sections)),
-    _section_impact: infoField("【若不拦截的后果】", sections.impact),
-    _section_approve: infoField("【审批通过意味着】", sections.ifApproved),
-    _section_ticket: infoField("【工单信息】", formatTicketBlock(sections)),
+    _section_what: infoField("本次操作", formatWhatBlock(sections)),
+    _section_risk: infoField(
+      riskSectionTitle(sections),
+      formatRiskBlock(sections),
+      "请先确认危险等级，再决定是否批准",
+    ),
+    _section_impact: infoField(
+      "若不拦截的后果",
+      clipFormText(sections.impact, 120),
+    ),
+    ...blastFields,
+    _section_approve: infoField(
+      "审批通过意味着",
+      clipFormText(sections.ifApproved, 100),
+    ),
     decision: {
       type: "string",
       title: "您的决定",
-      description: "请选择是否允许 Agent 继续执行上述操作",
-      enum: ["approve", "reject"],
-      enumNames: ["审批通过并继续执行", "拒绝（不执行）"],
+      description: `${sections.ticketId} · ${sections.expiresHint} · 不确定请选拒绝`,
+      enum: ["reject", "approve"],
+      enumNames: ["拒绝（不执行）", "审批通过并继续执行"],
+      default: "reject",
     },
     reason: {
       type: "string",
       title: "备注（可选）",
-      description: "拒绝时可填写原因，便于审计记录",
+      description: "拒绝时可填写原因",
     },
   };
 
@@ -246,7 +317,7 @@ export function buildElicitApprovalForm(
     .join("\n");
 
   return {
-    message: "⚠️ HITL 人工审批确认",
+    message: `⛔ HITL · ${sections.riskTierZh} · ${sections.riskType}`,
     requestedSchema: {
       type: "object",
       properties,
@@ -261,23 +332,20 @@ export function buildElicitApprovalForm(
  */
 export function buildApprovalBrief(ticket: ApprovalTicket): ApprovalBrief {
   const sections = buildApprovalSections(ticket);
-  const paramsBlock = formatParamsBlock(sections.paramsLines);
   const blast = parseBlastRadiusFromTicket(ticket);
   const blastBlock = blast ? formatBlastRadiusBlock(blast) : null;
 
   const message = joinBlocks([
-    "⚠️ HITL 人工审批确认",
+    `⛔ HITL · ${sections.riskTierZh} · ${sections.riskType}`,
     joinBlocks([
-      "【本次操作】",
-      sections.operation,
-      paramsBlock ? joinBlocks(["【关键参数】", paramsBlock]) : "",
-      blastBlock ? joinBlocks(["【爆炸半径案卷】", blastBlock]) : "",
-      joinBlocks(["【危险性】", formatRiskBlock(sections)]),
+      joinBlocks(["【本次操作】", formatWhatBlock(sections)]),
+      joinBlocks([riskSectionTitle(sections), formatRiskBlock(sections)]),
       joinBlocks(["【若不拦截的后果】", sections.impact]),
+      blastBlock ? joinBlocks(["【爆炸半径】", blastBlock]) : "",
       joinBlocks(["【审批通过意味着】", sections.ifApproved]),
       joinBlocks(["【工单信息】", formatTicketBlock(sections)]),
     ]),
-    "请在下方选择「拒绝（不执行）」或「审批通过并继续执行」。",
+    "请选择「拒绝（不执行）」或「审批通过并继续执行」。不确定时请拒绝。",
   ]);
 
   const risk_brief_zh = [

@@ -204,7 +204,7 @@ export function buildBlastRadiusBrief(input: {
   const verifyBlock = verify_plan.map((c, i) => `  ${i + 1}. ${c}`).join("\n");
 
   const summary_zh = [
-    `【爆炸半径案卷】${input.assessment.risk_level_zh}`,
+    `【爆炸半径】${input.assessment.risk_level_zh}`,
     `拟改：\n${plannedBlock}`,
     `波及（启发式）：\n${affectedBlock}`,
     `相关测试（启发式）：\n${testBlock}`,
@@ -223,7 +223,13 @@ export function buildBlastRadiusBrief(input: {
   };
 }
 
-export function formatBlastRadiusBlock(brief: BlastRadiusBrief): string {
+export function formatBlastRadiusSections(brief: BlastRadiusBrief): {
+  note: string;
+  planned: string;
+  affected: string;
+  tests: string;
+  verify: string;
+} {
   const planned = brief.planned_files.length
     ? brief.planned_files.map((f) => `• ${f}`).join("\n")
     : "• （未提供）";
@@ -238,15 +244,27 @@ export function formatBlastRadiusBlock(brief: BlastRadiusBrief): string {
   const tests = brief.affected_tests.length
     ? brief.affected_tests.map((f) => `• ${f}`).join("\n")
     : "• （未匹配）";
-  const verify = brief.verify_plan
-    .map((c, i) => `${i + 1}. ${c}`)
-    .join("\n");
+  const verify = brief.verify_plan.length
+    ? brief.verify_plan.map((c, i) => `${i + 1}. ${c}`).join("\n")
+    : "• （无）";
+  return {
+    note: "（启发式，非完整静态分析）",
+    planned,
+    affected: affectedLines,
+    tests,
+    verify,
+  };
+}
+
+/** Plain-text block for chat / risk_brief (already vertical). */
+export function formatBlastRadiusBlock(brief: BlastRadiusBrief): string {
+  const s = formatBlastRadiusSections(brief);
   return [
-    "（启发式，非完整静态分析）",
-    `拟改：\n${planned}`,
-    `波及：\n${affectedLines}`,
-    `相关测试：\n${tests}`,
-    `建议验证：\n${verify}`,
+    s.note,
+    `拟改：\n${s.planned}`,
+    `波及：\n${s.affected}`,
+    `相关测试：\n${s.tests}`,
+    `建议验证：\n${s.verify}`,
   ].join("\n\n");
 }
 

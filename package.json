@@ -1,6 +1,6 @@
 {
   "name": "hitl-gate-mcp",
-  "version": "0.6.1",
+  "version": "0.6.3",
   "description": "Human-in-the-Loop approval gate MCP for Cursor (elicitation + optional local web panel)",
   "type": "module",
   "license": "MIT",

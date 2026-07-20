@@ -33,7 +33,7 @@
 ## Agent 应如何用 MCP
 
 1. 副作用操作前调 **`assess_and_gate`**（`intent` + **`code_context`** + 可选 **`planned_changes`**）  
-2. 看 `gate_required`：仅 **高/致命** 弹审批；案卷在 `blast_radius` / 弹窗【爆炸半径案卷】  
+2. 看 `gate_required`：仅 **高/致命** 弹审批；案卷在 `blast_radius` / 弹窗【爆炸半径】分区  
 3. 仅 `ticket.status === "approved"` 可执行  
 4. 执行后调 **`submit_execution_report`**（`actual_files`、`verify_runs`、`params_hash`）  
 5. 用户要看记录 → **`list_approval_history`**，展示 `summary_zh` 表格（含案卷/对照列）  
