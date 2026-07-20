@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   const server = new McpServer(
     {
       name: "hitl_mcp",
-      version: "0.7.0",
+      version: "0.8.1",
     },
     { instructions: SERVER_INSTRUCTIONS },
   );
@@ -330,13 +330,12 @@ if (argv[0] === "--help" || argv[0] === "-h") {
   console.log(`hitl-gate-mcp — HITL approval gate MCP
 
   (no args)     Start MCP server on stdio (used by IDE mcp.json)
-  init [opts]   Install Cursor Rule/Skill templates into a project
+  init [opts]   Install Cursor + VS Code / Copilot hooks into a project
   --help        Show help
 
-Typical setup:
-  1) mcp.json: npx -y hitl-gate-mcp
-  2) In project: hitl-gate-mcp init
-     (or: npx hitl-gate-mcp init)
+Typical setup (Cursor + VS Code):
+  1) Add hitl_mcp to IDE MCP config (npx -y hitl-gate-mcp)
+  2) hitl-gate-mcp init          # --client all (default)
 `);
   process.exit(0);
 }

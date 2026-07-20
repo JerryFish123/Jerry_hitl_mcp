@@ -257,7 +257,7 @@ export function listApprovalHistory(
 }
 
 /**
- * Built-in risk assessment + optional auto ticket + Cursor elicitation.
+ * Built-in risk assessment + optional auto ticket + IDE elicitation.
  */
 export async function assessAndGate(
   store: ApprovalStore,

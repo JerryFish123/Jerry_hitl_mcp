@@ -1,7 +1,7 @@
 {
   "name": "hitl-gate-mcp",
-  "version": "0.7.0",
-  "description": "Human-in-the-Loop approval gate MCP (elicitation + optional panel; init installs IDE Rule/Skill)",
+  "version": "0.8.1",
+  "description": "Human-in-the-Loop approval gate MCP for Cursor and VS Code (elicitation + init hooks)",
   "type": "module",
   "license": "MIT",
   "author": "hitl-gate-mcp contributors",
@@ -19,6 +19,8 @@
     "hitl",
     "human-in-the-loop",
     "cursor",
+    "vscode",
+    "github-copilot",
     "approval",
     "agent-safety",
     "elicitation"

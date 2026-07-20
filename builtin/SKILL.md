@@ -39,4 +39,5 @@
 5. 用户要看记录 → **`list_approval_history`**，展示 `summary_zh` 表格（含案卷/对照列）  
 6. 可用 **`list_dangerous_ops`** 查看内置表  
 
-外置 Cursor Skill（`hitl-gate`）负责提醒 Agent **必须走上述流程**。
+外置钩子（`hitl-gate-mcp init`）负责提醒 Agent **必须走上述流程**：  
+Cursor → Rule/Skill；VS Code / Copilot → `.github/instructions/`。

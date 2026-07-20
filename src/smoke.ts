@@ -18,6 +18,7 @@ import {
 import { buildBlastRadiusBrief, buildExecutionComparison, pathsMatch } from "./blastRadius.js";
 import { runInit } from "./cli/init.js";
 import { SERVER_INSTRUCTIONS } from "./serverInstructions.js";
+import { buildElicitApprovalForm } from "./riskCopy.js";
 
 function uniqForSmoke(items: string[]): string[] {
   return [...new Set(items)].sort();
@@ -221,23 +222,68 @@ if (!SERVER_INSTRUCTIONS.includes("assess_and_gate")) {
   throw new Error("server instructions missing assess_and_gate");
 }
 
-const initDir = fs.mkdtempSync(path.join(os.tmpdir(), "hitl-init-"));
-const initDry = runInit({ cwd: initDir, dryRun: true });
-if (!initDry.ok || initDry.written.length < 2) {
-  throw new Error("init dry-run should plan rule+skill");
+const formTicket = store.create({
+  action: "package_publish",
+  summary: "publish form layout",
+  risk: "high",
+  params: {
+    blast_radius: {
+      planned_files: ["README.md", "package.json", "src/a.ts"],
+      affected_files: ["README.md", "package.json", "src/a.ts", "src/b.ts"],
+      affected_tests: [],
+      risk_notes: [],
+      verify_plan: [],
+      summary_zh: "test",
+      heuristic: true,
+    },
+  },
+});
+const form = buildElicitApprovalForm(formTicket);
+const formKeys = Object.keys(form.requestedSchema.properties);
+if (!formKeys.some((k) => k.startsWith("_blast_planned_"))) {
+  throw new Error("form should emit per-path blast planned fields");
 }
-const initReal = runInit({ cwd: initDir });
-if (!initReal.ok || initReal.written.length < 2) {
-  throw new Error("init should write rule+skill");
+if (!formKeys.some((k) => k.startsWith("_blast_affected_"))) {
+  throw new Error("form should emit per-path blast affected fields");
+}
+const planned0 = form.requestedSchema.properties._blast_planned_0 as {
+  default?: string;
+};
+if (planned0?.default !== "README.md") {
+  throw new Error("each blast path field should hold a single path");
+}
+
+const initDir = fs.mkdtempSync(path.join(os.tmpdir(), "hitl-init-"));
+const initDry = runInit({ cwd: initDir, dryRun: true, client: "all" });
+if (!initDry.ok || initDry.written.length < 4) {
+  throw new Error("init dry-run should plan cursor+vscode hooks");
+}
+const initReal = runInit({ cwd: initDir, client: "all" });
+if (!initReal.ok || initReal.written.length < 4) {
+  throw new Error("init should write cursor+vscode hooks");
 }
 if (
   !fs.existsSync(path.join(initDir, ".cursor/rules/hitl-auto-gate.mdc")) ||
-  !fs.existsSync(path.join(initDir, ".cursor/skills/hitl-gate/SKILL.md"))
+  !fs.existsSync(path.join(initDir, ".cursor/skills/hitl-gate/SKILL.md")) ||
+  !fs.existsSync(
+    path.join(initDir, ".github/instructions/hitl-gate.instructions.md"),
+  ) ||
+  !fs.existsSync(path.join(initDir, ".vscode/mcp.json.example"))
 ) {
-  throw new Error("init files missing on disk");
+  throw new Error("init dual-client files missing on disk");
 }
-const initSkip = runInit({ cwd: initDir });
-if (initSkip.skipped.length < 2) {
+const initVscodeOnly = runInit({
+  cwd: fs.mkdtempSync(path.join(os.tmpdir(), "hitl-init-vsc-")),
+  client: "vscode",
+});
+if (
+  !initVscodeOnly.ok ||
+  !initVscodeOnly.written.some((w) => w.includes("instructions"))
+) {
+  throw new Error("init --client vscode should write copilot instructions");
+}
+const initSkip = runInit({ cwd: initDir, client: "all" });
+if (initSkip.skipped.length < 4) {
   throw new Error("init without --force should skip existing files");
 }
 

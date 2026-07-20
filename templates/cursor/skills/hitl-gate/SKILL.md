@@ -55,4 +55,4 @@ description: >-
 ## 与 MCP 关系
 
 判断规则在 MCP；本 Skill 约束调用时机与「记录展示在对话里」的体验。  
-安装：`npx hitl-gate-mcp init`（需先在 IDE 配置好 mcp.json）。
+安装：`npx hitl-gate-mcp init`（默认同时装 Cursor + VS Code 钩子；需先配置 MCP）。

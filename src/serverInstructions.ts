@@ -19,6 +19,7 @@ export const SERVER_INSTRUCTIONS = [
   "When the user asks for 审批记录 / approval history / audit: call list_approval_history",
   "and present summary_zh (markdown table) in chat. Do not invent records.",
   "",
-  "Hard client hooks (Rule/Skill) are optional: run `npx hitl-gate-mcp init` in the project",
-  "after configuring this MCP in the IDE. Soft instructions alone are not 100% reliable.",
+  "Hard client hooks are optional: run `npx hitl-gate-mcp init` (Cursor Rule/Skill +",
+  "VS Code Copilot instructions). Soft instructions alone are not 100% reliable.",
+  "If the IDE approval form is unavailable, show user_prompt_zh and/or enable HITL_ENABLE_PANEL=1.",
 ].join("\n");

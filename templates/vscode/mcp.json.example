@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "hitl_mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "hitl-gate-mcp"],
+      "env": {
+        "HITL_ELICIT": "1",
+        "HITL_ENABLE_PANEL": "0"
+      }
+    }
+  }
+}

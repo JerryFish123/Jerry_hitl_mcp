@@ -114,15 +114,56 @@ function clipFormText(text: string, max = FORM_TEXT_MAX): string {
   return `${oneLine.slice(0, max - 1)}…`;
 }
 
-/** Bullet list for form: one path per line (Cursor may flatten; still best-effort). */
+/** Plain-text path list (chat / risk_brief). Newlines OK outside Cursor form. */
 function formatPathList(paths: string[], empty = "• （无）"): string {
   if (!paths.length) return empty;
-  const shown = paths.slice(0, 6);
+  const shown = paths.slice(0, 12);
   const lines = shown.map((p) => `• ${p}`);
   if (paths.length > shown.length) {
     lines.push(`• …另 ${paths.length - shown.length} 项`);
   }
   return lines.join("\n");
+}
+
+const FORM_PATH_MAX = 12;
+
+/**
+ * Cursor flattens newlines inside one field into a horizontal run.
+ * Emit one read-only field per path so the form stacks them vertically.
+ */
+function pathFieldsForForm(
+  prefix: string,
+  sectionTitle: string,
+  paths: string[],
+  opts?: { note?: string; emptyText?: string },
+): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  const note = opts?.note;
+  const emptyText = opts?.emptyText ?? "（未提供路径）";
+
+  if (!paths.length) {
+    fields[`${prefix}_hdr`] = infoField(sectionTitle, emptyText, note);
+    return fields;
+  }
+
+  const shown = paths.slice(0, FORM_PATH_MAX);
+  fields[`${prefix}_hdr`] = infoField(
+    `${sectionTitle}（${paths.length}）`,
+    note ?? "下列路径逐条竖排；请逐项确认",
+  );
+  shown.forEach((p, i) => {
+    fields[`${prefix}_${i}`] = infoField(
+      `${i + 1}/${shown.length}`,
+      p,
+    );
+  });
+  if (paths.length > shown.length) {
+    fields[`${prefix}_more`] = infoField(
+      "…",
+      `另有 ${paths.length - shown.length} 项未展开`,
+    );
+  }
+  return fields;
 }
 
 export interface ApprovalSections {
@@ -261,20 +302,26 @@ export function buildElicitApprovalForm(
     (f) => !plannedPaths.includes(f),
   );
 
-  const blastFields: Record<string, unknown> = {};
-  if (blastSections) {
-    blastFields._section_blast_planned = infoField(
-      "爆炸半径 · 拟改",
-      formatPathList(plannedPaths, "• （未提供路径）"),
-      blastSections.note,
-    );
-    if (extraAffected.length) {
-      blastFields._section_blast_affected = infoField(
-        "爆炸半径 · 可能波及",
-        formatPathList(extraAffected),
-      );
-    }
-  }
+  const blastFields: Record<string, unknown> = blastSections
+    ? {
+        ...pathFieldsForForm(
+          "_blast_planned",
+          "爆炸半径 · 拟改",
+          plannedPaths,
+          {
+            note: blastSections.note,
+            emptyText: "（未提供路径）",
+          },
+        ),
+        ...(extraAffected.length
+          ? pathFieldsForForm(
+              "_blast_affected",
+              "爆炸半径 · 可能波及",
+              extraAffected,
+            )
+          : {}),
+      }
+    : {};
 
   const properties: Record<string, unknown> = {
     _section_what: infoField("本次操作", formatWhatBlock(sections)),
