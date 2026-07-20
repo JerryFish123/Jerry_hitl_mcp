@@ -1,5 +1,6 @@
 import type { ApprovalTicket, ApprovalStatus } from "./types.js";
 import { formatRiskDisplay, type RiskLevelOrNone } from "./riskLabels.js";
+import { formatClosureStatus } from "./blastRadius.js";
 
 const STATUS_ZH: Record<ApprovalStatus, string> = {
   pending: "待审批",
@@ -75,6 +76,7 @@ export interface HistoryTableRow {
   approver: string;
   status: string;
   reason: string;
+  closure: string;
 }
 
 export function toHistoryTableRow(ticket: ApprovalTicket): HistoryTableRow {
@@ -89,6 +91,7 @@ export function toHistoryTableRow(ticket: ApprovalTicket): HistoryTableRow {
     approver: formatDecidedBy(ticket.decided_by),
     status: STATUS_ZH[ticket.status] ?? ticket.status,
     reason: formatDecisionReason(ticket),
+    closure: formatClosureStatus(ticket),
   };
 }
 
@@ -106,6 +109,7 @@ export function buildHistoryMarkdownTable(
     "操作人",
     "审批人",
     "状态",
+    "案卷/对照",
     "原因/备注",
   ];
   const rows = tickets.map((t) => {
@@ -119,6 +123,7 @@ export function buildHistoryMarkdownTable(
       r.requester,
       r.approver,
       r.status,
+      r.closure,
       r.reason,
     ].map(escapeCell);
   });

@@ -140,6 +140,36 @@ export class ApprovalStore {
     return this.list({ status: "pending" });
   }
 
+  attachExecutionReport(
+    ticketId: string,
+    patch: {
+      execution_report: Record<string, unknown>;
+      execution_comparison: Record<string, unknown>;
+      execution_at: string;
+    },
+  ): ApprovalTicket {
+    this.syncFromDisk();
+    const current = this.get(ticketId);
+    if (!current) {
+      throw new Error(`ticket_not_found: ${ticketId}`);
+    }
+    if (current.status !== "approved") {
+      throw new Error(
+        `ticket_not_approved: ${ticketId} current=${current.status}`,
+      );
+    }
+    const next: ApprovalTicket = {
+      ...current,
+      params: {
+        ...current.params,
+        ...patch,
+      },
+    };
+    this.tickets.set(ticketId, next);
+    this.persist();
+    return next;
+  }
+
   resolve(
     ticketId: string,
     decision: "approved" | "rejected",

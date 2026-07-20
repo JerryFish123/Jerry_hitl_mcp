@@ -13,6 +13,15 @@ import {
   buildHistorySummaryZh,
   toHistoryTableRow,
 } from "./historyFormat.js";
+import type { CodeContextInput } from "./contextRisk.js";
+import {
+  buildBlastRadiusBrief,
+  buildExecutionComparison,
+  formatClosureStatus,
+  parseBlastRadiusFromTicket,
+  type ExecutionReportInput,
+  type PlannedChangesInput,
+} from "./blastRadius.js";
 
 function panelEnabled(): boolean {
   const v = (process.env.HITL_ENABLE_PANEL ?? "0").trim().toLowerCase();
@@ -48,6 +57,9 @@ export function ticketPublicView(
       ticket.status === "rejected" ||
       ticket.status === "expired" ||
       ticket.status === "cancelled",
+    blast_radius: parseBlastRadiusFromTicket(ticket),
+    closure_status: formatClosureStatus(ticket),
+    execution_comparison: ticket.params?.execution_comparison ?? null,
   };
 }
 
@@ -102,7 +114,30 @@ export function createApproval(
   if (!input.summary?.trim()) {
     throw new Error("summary is required");
   }
-  const ticket = store.create(input);
+
+  let params = { ...(input.params ?? {}) };
+  if (!params.blast_radius) {
+    const code_context = params.code_context as CodeContextInput | undefined;
+    const planned_changes = params.planned_changes as
+      | PlannedChangesInput
+      | undefined;
+    const assessment = assessRisk({
+      intent: input.summary.trim(),
+      action: input.action,
+      params,
+      code_context,
+    });
+    params = {
+      ...params,
+      blast_radius: buildBlastRadiusBrief({
+        assessment,
+        code_context,
+        planned_changes,
+      }),
+    };
+  }
+
+  const ticket = store.create({ ...input, params });
   const fallback = pendingFallbackPrompt(store, ticket);
   return {
     ...ticketPublicView(store, ticket),
@@ -211,6 +246,7 @@ export function listApprovalHistory(
       requester: r.requester,
       approver: r.approver,
       status: r.status,
+      closure: r.closure,
       reason: r.reason,
     })),
     table_md,
@@ -230,6 +266,7 @@ export async function assessAndGate(
     action?: string;
     params?: Record<string, unknown>;
     code_context?: import("./contextRisk.js").CodeContextInput;
+    planned_changes?: PlannedChangesInput;
     auto_create?: boolean;
     ttl_seconds?: number;
     requester?: string;
@@ -245,6 +282,12 @@ export async function assessAndGate(
     action: input.action,
     params: input.params,
     code_context: input.code_context,
+  });
+
+  const blast_radius = buildBlastRadiusBrief({
+    assessment,
+    code_context: input.code_context,
+    planned_changes: input.planned_changes,
   });
 
   const autoCreate = input.auto_create !== false;
@@ -270,6 +313,7 @@ export async function assessAndGate(
         context_factors: assessment.context_factors,
         risk_level_zh: assessment.risk_level_zh,
         risk_tier: assessment.risk_tier,
+        blast_radius,
       },
       risk,
       ttl_seconds: input.ttl_seconds,
@@ -291,7 +335,7 @@ export async function assessAndGate(
         approval_channel = "client";
         if (outcome.ticket.status === "approved") {
           next_step =
-            "User approved in IDE elicitation UI. You MAY proceed (prefer dry-run).";
+            "User approved in IDE elicitation UI. You MAY proceed (prefer dry-run). After executing, call submit_execution_report with actual_files and verify_runs.";
           user_prompt_zh = null;
         } else {
           next_step =
@@ -332,6 +376,7 @@ export async function assessAndGate(
       rationale: assessment.rationale,
       context_summary_zh: assessment.context_summary_zh,
       context_factors: assessment.context_factors,
+      blast_radius,
     },
     ticket: ticketView,
     approval_channel,
@@ -347,6 +392,58 @@ export function listDangerousOps(): Record<string, unknown> {
     count: listDangerousOpsPublic().length,
     operations: listDangerousOpsPublic(),
     policy_ref: "builtin/SKILL.md + src/policy.ts",
+  };
+}
+
+/**
+ * After approved execution: submit actual changes + verify results for plan vs actual comparison.
+ */
+export function submitExecutionReport(
+  store: ApprovalStore,
+  input: {
+    ticket_id: string;
+    actual_files?: string[];
+    verify_runs?: ExecutionReportInput["verify_runs"];
+    params_hash?: string;
+    note?: string;
+  },
+): Record<string, unknown> {
+  const ticket = store.get(input.ticket_id);
+  if (!ticket) {
+    throw new Error(`ticket_not_found: ${input.ticket_id}`);
+  }
+  if (ticket.status !== "approved") {
+    throw new Error(
+      `ticket_not_approved: ${input.ticket_id} current=${ticket.status}`,
+    );
+  }
+  if (ticket.params?.execution_comparison) {
+    throw new Error(
+      `execution_report_already_submitted: ${input.ticket_id}`,
+    );
+  }
+
+  const report: ExecutionReportInput = {
+    actual_files: input.actual_files,
+    verify_runs: input.verify_runs,
+    params_hash: input.params_hash,
+    note: input.note,
+  };
+  const comparison = buildExecutionComparison(ticket, report);
+  const execution_at = new Date().toISOString();
+
+  const updated = store.attachExecutionReport(input.ticket_id, {
+    execution_report: report as unknown as Record<string, unknown>,
+    execution_comparison: comparison as unknown as Record<string, unknown>,
+    execution_at,
+  });
+
+  return {
+    ...ticketPublicView(store, updated),
+    comparison,
+    summary_zh: comparison.summary_zh,
+    next_step:
+      "Present summary_zh to the user as post-execution closure. Params hash mismatch means investigate before claiming done.",
   };
 }
 

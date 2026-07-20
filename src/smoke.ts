@@ -13,7 +13,13 @@ import {
   listApprovalHistory,
   listDangerousOps,
   listPendingApprovals,
+  submitExecutionReport,
 } from "./service.js";
+import { buildBlastRadiusBrief, buildExecutionComparison, pathsMatch } from "./blastRadius.js";
+
+function uniqForSmoke(items: string[]): string[] {
+  return [...new Set(items)].sort();
+}
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hitl-smoke-"));
 const store = new ApprovalStore({
@@ -66,9 +72,13 @@ const assessment = gated.assessment as {
   gate_required: boolean;
   risk: string;
   risk_level_zh: string;
+  blast_radius?: { planned_files: string[]; heuristic: boolean };
 };
 if (!assessment.gate_required) {
   throw new Error("expected .env delete to require gate");
+}
+if (!assessment.blast_radius?.planned_files?.includes(".env")) {
+  throw new Error("expected blast_radius planned_files to include .env");
 }
 if (assessment.risk_level_zh !== "高危险" && assessment.risk_level_zh !== "致命危险") {
   throw new Error("expected high/critical tier for delete .env");
@@ -102,12 +112,92 @@ if (!status.can_execute) {
   throw new Error("can_execute should be true");
 }
 
+const closed = submitExecutionReport(store, {
+  ticket_id: String(ticket.ticket_id),
+  actual_files: [".env"],
+  verify_runs: [{ command: "vitest run .env.test.ts", passed: true }],
+  params_hash: String(status.params_hash),
+});
+if (!String(closed.summary_zh).includes("参数哈希")) {
+  throw new Error("execution report should mention params hash");
+}
+if (closed.closure_status !== "已对照") {
+  throw new Error("closure_status should be 已对照");
+}
+
+try {
+  submitExecutionReport(store, {
+    ticket_id: String(ticket.ticket_id),
+    actual_files: [".env"],
+  });
+  throw new Error("duplicate execution report should be rejected");
+} catch (e) {
+  if (!String(e).includes("execution_report_already_submitted")) {
+    throw e;
+  }
+}
+
+if (!pathsMatch(".env", "/proj/.env")) {
+  throw new Error("pathsMatch should treat .env and /proj/.env as same file");
+}
+const pathCmp = buildExecutionComparison(
+  store.get(String(ticket.ticket_id))!,
+  { actual_files: ["/proj/.env"] },
+);
+if (
+  pathCmp.missing_from_actual.length ||
+  pathCmp.extra_in_actual.length
+) {
+  throw new Error("normalized path comparison should not false-positive missing/extra");
+}
+
+const scopeBrief = buildBlastRadiusBrief({
+  assessment: ctxDelete,
+  planned_changes: { files: [".env"] },
+});
+scopeBrief.affected_files = uniqForSmoke([
+  ".env",
+  "src/config.ts",
+  "src/util.ts",
+]);
+const scopeTicket = store.create({
+  action: "delete_files",
+  summary: "delete env",
+  params: { blast_radius: scopeBrief },
+});
+store.resolve(scopeTicket.ticket_id, "approved", { decided_by: "cli" });
+const scopeCmp = buildExecutionComparison(scopeTicket, {
+  actual_files: [".env"],
+});
+if (scopeCmp.planned_scope.length !== 1 || scopeCmp.planned_scope[0] !== ".env") {
+  throw new Error("planned_scope should only include planned_files");
+}
+if (scopeCmp.missing_from_actual.length || scopeCmp.extra_in_actual.length) {
+  throw new Error("scope-only planned_files should match .env actual");
+}
+
+const brief = buildBlastRadiusBrief({
+  assessment: ctxDelete,
+  code_context: {
+    files: ["src/services/userService.ts"],
+    active_file: "src/services/userService.ts",
+  },
+  planned_changes: { files: ["src/services/userService.ts"] },
+});
+if (!brief.affected_tests.some((t) => t.includes("userService"))) {
+  throw new Error("blast radius should guess userService tests");
+}
+
 const t2 = createApproval(store, {
   action: "git_force_push",
   summary: "Force push main",
   params: { ref: "main" },
   risk: "critical",
 });
+const t2Params = t2.params as { blast_radius?: { summary_zh?: string } };
+if (!t2Params?.blast_radius?.summary_zh) {
+  throw new Error("createApproval should attach blast_radius brief");
+}
 store.resolve(String(t2.ticket_id), "rejected", {
   reason: "too dangerous",
   decided_by: "cli",
@@ -120,6 +210,9 @@ if (!rejected.must_stop || rejected.status !== "rejected") {
 const history = listApprovalHistory(store, { limit: 10 });
 if (Number(history.shown) < 2 || !String(history.summary_zh).includes("|")) {
   throw new Error("list_approval_history table failed");
+}
+if (!String(history.summary_zh).includes("案卷/对照")) {
+  throw new Error("history table should include closure column");
 }
 
 console.log("smoke ok", {

@@ -95,8 +95,16 @@ npm run build
 3. **仅「高危险」「致命危险」**（`gate_required === true`）会弹出审批表单 → 选择「批准并继续」或「拒绝」  
 4. 中/低/无危险不触发 HITL，Agent 可继续但应谨慎  
 5. 仅当返回 `ticket.status === "approved"` 时才可继续执行；拒绝/取消则停止  
+6. **高/致命危险**审批时会附带 **爆炸半径案卷**（拟改路径、启发式波及、建议验证命令）  
+7. 批准并执行后，Agent 应调用 **`submit_execution_report`** 提交实际改动与验证结果，产出 **计划 vs 实际** 对照  
 
 在对话里随便说「可以」不算正式批准；以工单状态为准。
+
+### 爆炸半径（批前案卷 + 批后对照）
+
+- **批前**：`gate_required === true` 时，工单与审批弹窗含 `blast_radius`（基于 `code_context` / `planned_changes` 的**启发式**路径分析，非完整静态依赖图）
+- **批后**：`submit_execution_report(ticket_id, actual_files, verify_runs, params_hash?)` → 返回 `summary_zh` 对照（计划波及 vs 实际改动、验证项、参数哈希一致性）
+- **无/低/中危险**：不弹审批，但 `assess_and_gate` 仍可能返回轻量 `blast_radius` 供 Agent 参考
 
 ### 查看审批记录
 
@@ -107,7 +115,8 @@ npm run build
 
 | 工具 | 作用 |
 |------|------|
-| `assess_and_gate` | 结合 intent + code_context 五档风险评估；仅高/致命危险开单审批 |
+| `assess_and_gate` | 五档风险 + 爆炸半径案卷；仅高/致命开单审批 |
+| `submit_execution_report` | 批准后提交实际改动/验证，产出计划 vs 实际对照 |
 | `list_dangerous_ops` | 查看内置危险操作表 |
 | `request_approval` | 手动开单（一般用上面主路径即可） |
 | `get_approval_status` | 查询某张工单状态 |

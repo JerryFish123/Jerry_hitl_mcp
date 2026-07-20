@@ -7,10 +7,11 @@
 
 在调用真正有副作用的操作前：
 
-1. 用内置危险操作表评估意图  
-2. 若 `medium` / `high` / `critical` → **自动开审批单**  
-3. 优先通过 **Cursor MCP elicitation**（IDE 内表单）批准/拒绝；可选网页面板（`HITL_ENABLE_PANEL=1`）  
-4. 拒绝/过期必须停止  
+1. 用内置危险操作表 + `code_context` 评估意图（五档风险）  
+2. 若 **高危险 / 致命危险** → **自动开审批单**（含爆炸半径案卷）  
+3. 优先通过 **IDE MCP elicitation** 批准/拒绝；可选网页面板（`HITL_ENABLE_PANEL=1`）  
+4. 批准后执行 → 调用 **`submit_execution_report`** 产出计划 vs 实际对照  
+5. 拒绝/过期必须停止  
 
 ## 危险操作枚举（摘要）
 
@@ -31,11 +32,11 @@
 
 ## Agent 应如何用 MCP
 
-1. 用户提出可能有副作用的请求时，先调 **`assess_and_gate`**（传入 `intent`，可选 `action`/`params`）  
-2. 工具调用中 Cursor 弹出审批表单；用户点选后返回 `ticket.status`  
-3. 仅 `approved` 可执行（优先 dry-run）；`rejected` / `expired` → 停止  
-4. 若仍 `pending`：按 `user_prompt_zh` 提示；可选面板见 `panel_url`  
-5. 可用 **`list_dangerous_ops`** 查看内置表  
-6. 用户要看 **审批记录 / 审批历史** 时，调用 **`list_approval_history`**，在对话里展示 `summary_zh`（Markdown 表格：时间、操作人、审批人、状态、原因等）
+1. 副作用操作前调 **`assess_and_gate`**（`intent` + **`code_context`** + 可选 **`planned_changes`**）  
+2. 看 `gate_required`：仅 **高/致命** 弹审批；案卷在 `blast_radius` / 弹窗【爆炸半径案卷】  
+3. 仅 `ticket.status === "approved"` 可执行  
+4. 执行后调 **`submit_execution_report`**（`actual_files`、`verify_runs`、`params_hash`）  
+5. 用户要看记录 → **`list_approval_history`**，展示 `summary_zh` 表格（含案卷/对照列）  
+6. 可用 **`list_dangerous_ops`** 查看内置表  
 
 外置 Cursor Skill（`hitl-gate`）负责提醒 Agent **必须走上述流程**。

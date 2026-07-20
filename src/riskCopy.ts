@@ -1,5 +1,9 @@
 import type { ApprovalTicket } from "./types.js";
 import {
+  formatBlastRadiusBlock,
+  parseBlastRadiusFromTicket,
+} from "./blastRadius.js";
+import {
   DANGEROUS_OP_RULES,
   getRuleById,
   type DangerousOpRule,
@@ -59,7 +63,19 @@ function matchedIdsFromTicket(ticket: ApprovalTicket): string[] {
 }
 
 function formatParamsLines(params: Record<string, unknown>): string[] {
-  const skip = new Set(["matched_rules", "intent", "params_hash"]);
+  const skip = new Set([
+    "matched_rules",
+    "intent",
+    "params_hash",
+    "code_context",
+    "context_factors",
+    "risk_level_zh",
+    "risk_tier",
+    "blast_radius",
+    "execution_report",
+    "execution_comparison",
+    "execution_at",
+  ]);
   const lines: string[] = [];
   for (const [k, v] of Object.entries(params)) {
     if (skip.has(k) || v == null) continue;
@@ -191,10 +207,16 @@ export function buildElicitApprovalForm(
   const sections = buildApprovalSections(ticket);
   const paramsBlock = formatParamsBlock(sections.paramsLines);
 
+  const blast = parseBlastRadiusFromTicket(ticket);
+  const blastBlock = blast ? formatBlastRadiusBlock(blast) : null;
+
   const properties: Record<string, unknown> = {
     _section_operation: infoField("【本次操作】", sections.operation),
     ...(paramsBlock
       ? { _section_params: infoField("【关键参数】", paramsBlock) }
+      : {}),
+    ...(blastBlock
+      ? { _section_blast_radius: infoField("【爆炸半径案卷】", blastBlock) }
       : {}),
     _section_risk: infoField("【危险性】", formatRiskBlock(sections)),
     _section_impact: infoField("【若不拦截的后果】", sections.impact),
@@ -218,7 +240,10 @@ export function buildElicitApprovalForm(
     `【${sections.riskType}】风险 ${ticket.risk}`,
     `后果：${sections.impact}`,
     `若批准：${sections.ifApproved}`,
-  ].join("\n");
+    blastBlock ? `\n${blastBlock}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return {
     message: "⚠️ HITL 人工审批确认",
@@ -237,6 +262,8 @@ export function buildElicitApprovalForm(
 export function buildApprovalBrief(ticket: ApprovalTicket): ApprovalBrief {
   const sections = buildApprovalSections(ticket);
   const paramsBlock = formatParamsBlock(sections.paramsLines);
+  const blast = parseBlastRadiusFromTicket(ticket);
+  const blastBlock = blast ? formatBlastRadiusBlock(blast) : null;
 
   const message = joinBlocks([
     "⚠️ HITL 人工审批确认",
@@ -244,6 +271,7 @@ export function buildApprovalBrief(ticket: ApprovalTicket): ApprovalBrief {
       "【本次操作】",
       sections.operation,
       paramsBlock ? joinBlocks(["【关键参数】", paramsBlock]) : "",
+      blastBlock ? joinBlocks(["【爆炸半径案卷】", blastBlock]) : "",
       joinBlocks(["【危险性】", formatRiskBlock(sections)]),
       joinBlocks(["【若不拦截的后果】", sections.impact]),
       joinBlocks(["【审批通过意味着】", sections.ifApproved]),
@@ -256,7 +284,10 @@ export function buildApprovalBrief(ticket: ApprovalTicket): ApprovalBrief {
     `【${sections.riskType}】风险 ${ticket.risk}`,
     `后果：${sections.impact}`,
     `若批准：${sections.ifApproved}`,
-  ].join("\n");
+    blastBlock ? `\n${blastBlock}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return { message, risk_brief_zh };
 }

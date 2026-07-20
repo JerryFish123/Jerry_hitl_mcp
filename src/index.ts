@@ -11,6 +11,7 @@ import {
   listDangerousOps,
   listPendingApprovals,
   panelEnabled,
+  submitExecutionReport,
   ticketPublicView,
 } from "./service.js";
 import { getSharedStore } from "./store.js";
@@ -72,12 +73,12 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "hitl_mcp",
-    version: "0.5.0",
+    version: "0.6.1",
   });
 
   server.tool(
     "assess_and_gate",
-    "Assess user intent + optional code_context; returns 5-tier risk (无/低/中/高/致命). ONLY 高危险 & 致命危险 trigger HITL approval. Agent MUST pass code_context (active file, snippets, affected paths) when evaluating code changes. Call BEFORE side effects.",
+    "Assess intent + code_context; 5-tier risk. ONLY high/critical trigger HITL. When gate_required, returns blast_radius brief in ticket + elicitation. After approved execution, call submit_execution_report.",
     {
       intent: z
         .string()
@@ -109,6 +110,13 @@ async function main(): Promise<void> {
         .describe(
           "Current code context: combine with intent for risk assessment",
         ),
+      planned_changes: z
+        .object({
+          files: z.array(z.string()).optional(),
+          summary: z.string().optional(),
+        })
+        .optional()
+        .describe("Planned paths for blast radius brief"),
       params: z
         .record(z.unknown())
         .optional()
@@ -129,6 +137,7 @@ async function main(): Promise<void> {
               intent: args.intent,
               action: args.action,
               code_context: args.code_context,
+              planned_changes: args.planned_changes,
               params: args.params,
               auto_create: args.auto_create,
               ttl_seconds: args.ttl_seconds,
@@ -240,8 +249,46 @@ async function main(): Promise<void> {
   );
 
   server.tool(
+    "submit_execution_report",
+    "After ticket is approved and Agent executed changes: submit actual_files + verify_runs. Returns plan vs actual comparison summary_zh and params hash check.",
+    {
+      ticket_id: z.string(),
+      actual_files: z.array(z.string()).optional(),
+      verify_runs: z
+        .array(
+          z.object({
+            command: z.string(),
+            passed: z.boolean().optional(),
+            output: z.string().optional(),
+          }),
+        )
+        .optional(),
+      params_hash: z
+        .string()
+        .optional()
+        .describe("Optional: must match ticket.params_hash from approval"),
+      note: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        return textResult(
+          submitExecutionReport(store, {
+            ticket_id: args.ticket_id,
+            actual_files: args.actual_files,
+            verify_runs: args.verify_runs,
+            params_hash: args.params_hash,
+            note: args.note,
+          }),
+        );
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.tool(
     "list_approval_history",
-    "List approval audit history. Call when user asks 看审批记录. Returns summary_zh as markdown TABLE (time, ticket, action, summary, risk, requester, approver, status, reason). Present summary_zh in chat.",
+    "List approval audit history. Returns summary_zh markdown TABLE with closure column (案卷/对照). Present summary_zh in chat.",
     {
       status: historyStatusSchema
         .optional()
