@@ -5,12 +5,13 @@ import {
   type DangerousOpRule,
 } from "./policy.js";
 import type { RiskLevel } from "./types.js";
+import { formatRiskDisplay, riskRank, type RiskLevelOrNone } from "./riskLabels.js";
 
 export const RISK_LABEL_ZH: Record<RiskLevel, string> = {
-  critical: "严重 — 可能造成不可逆损失或大范围影响，通常无法一键撤销",
-  high: "高 — 可能丢失数据、破坏环境或产生难以回滚的副作用",
-  medium: "中 — 有一定副作用，建议确认范围后再执行",
-  low: "低 — 影响相对有限，但仍需人工确认",
+  critical: "致命危险 — 可能造成不可逆损失或大范围影响",
+  high: "高危险 — 可能丢失数据、破坏环境或产生难以回滚的副作用",
+  medium: "中危险 — 有一定副作用，建议确认范围后再执行",
+  low: "低危险 — 影响相对有限",
 };
 
 const FALLBACK_IMPACT =
@@ -27,17 +28,8 @@ const GENERIC_RULE: Pick<
   if_approved_zh: FALLBACK_IF_APPROVED,
 };
 
-function riskRank(r: RiskLevel): number {
-  switch (r) {
-    case "critical":
-      return 4;
-    case "high":
-      return 3;
-    case "medium":
-      return 2;
-    case "low":
-      return 1;
-  }
+function riskRankLocal(r: RiskLevel): number {
+  return riskRank(r as RiskLevelOrNone);
 }
 
 export function pickPrimaryRule(
@@ -48,7 +40,7 @@ export function pickPrimaryRule(
   for (const id of matchedRuleIds) {
     const rule = getRuleById(id);
     if (!rule) continue;
-    if (!best || riskRank(rule.risk) >= riskRank(best.risk)) {
+    if (!best || riskRankLocal(rule.risk) >= riskRankLocal(best.risk)) {
       best = rule;
     }
   }
@@ -127,7 +119,7 @@ export function buildApprovalSections(
     operation: ticket.summary,
     paramsLines: formatParamsLines(ticket.params),
     riskType: rule.title,
-    riskLevel: ticket.risk.toUpperCase(),
+    riskLevel: formatRiskDisplay(ticket.risk as RiskLevelOrNone),
     riskLabel: RISK_LABEL_ZH[ticket.risk] ?? ticket.risk,
     otherRules,
     impact,
@@ -148,8 +140,8 @@ function formatParamsBlock(lines: string[]): string {
 
 function formatRiskBlock(sections: ApprovalSections): string {
   const lines = [
+    `等级：${sections.riskLevel}`,
     `类型：${sections.riskType}`,
-    `等级：${sections.riskLevel} — ${sections.riskLabel}`,
   ];
   if (sections.otherRules) {
     lines.push(`还匹配：${sections.otherRules}`);

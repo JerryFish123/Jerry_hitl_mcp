@@ -229,6 +229,7 @@ export async function assessAndGate(
     intent: string;
     action?: string;
     params?: Record<string, unknown>;
+    code_context?: import("./contextRisk.js").CodeContextInput;
     auto_create?: boolean;
     ttl_seconds?: number;
     requester?: string;
@@ -242,17 +243,21 @@ export async function assessAndGate(
   const assessment = assessRisk({
     intent: input.intent,
     action: input.action,
+    params: input.params,
+    code_context: input.code_context,
   });
 
   const autoCreate = input.auto_create !== false;
   let ticketView: Record<string, unknown> | null = null;
   let approval_channel: "client" | "panel" | "pending" | "none" = "none";
   let next_step =
-    "No HITL gate required by built-in policy. You may proceed with caution.";
+    assessment.gate_required
+      ? "HITL gate required but auto_create was skipped or failed."
+      : `评估为${assessment.risk_level_zh}，无需 HITL 审批；Agent 可继续（仍需谨慎）。`;
   let user_prompt_zh: string | null = null;
   let risk_brief_zh: string | null = null;
 
-  if (assessment.requires_approval && autoCreate) {
+  if (assessment.gate_required && autoCreate) {
     const risk = assessment.risk === "none" ? "high" : assessment.risk;
     const created = store.create({
       action: assessment.suggested_action,
@@ -261,6 +266,10 @@ export async function assessAndGate(
         ...(input.params ?? {}),
         matched_rules: assessment.matched_rules,
         intent: input.intent.trim(),
+        code_context: input.code_context ?? null,
+        context_factors: assessment.context_factors,
+        risk_level_zh: assessment.risk_level_zh,
+        risk_tier: assessment.risk_tier,
       },
       risk,
       ttl_seconds: input.ttl_seconds,
@@ -313,11 +322,16 @@ export async function assessAndGate(
 
   return {
     assessment: {
-      requires_approval: assessment.requires_approval,
+      requires_approval: assessment.gate_required,
+      gate_required: assessment.gate_required,
       risk: assessment.risk,
+      risk_tier: assessment.risk_tier,
+      risk_level_zh: assessment.risk_level_zh,
       matched_rules: assessment.matched_rules,
       suggested_action: assessment.suggested_action,
       rationale: assessment.rationale,
+      context_summary_zh: assessment.context_summary_zh,
+      context_factors: assessment.context_factors,
     },
     ticket: ticketView,
     approval_channel,

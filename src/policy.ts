@@ -1,4 +1,18 @@
 import type { RiskLevel } from "./types.js";
+import {
+  adjustRiskByContext,
+  buildAssessmentText,
+  type CodeContextInput,
+} from "./contextRisk.js";
+import {
+  formatRiskTierZh,
+  maxRisk,
+  requiresGate,
+  riskRank,
+  type RiskLevelOrNone,
+} from "./riskLabels.js";
+
+export type { CodeContextInput };
 
 export interface DangerousOpRule {
   id: string;
@@ -192,11 +206,100 @@ export const DANGEROUS_OP_RULES: DangerousOpRule[] = [
     if_approved_zh:
       "Agent 将触发面向多用户的外部副作用（邮件、支付等）。请确认名单与金额。",
   },
+  // --- 中/低危险：评估并告知 Agent，但不触发 HITL 审批 ---
+  {
+    id: "git_push_regular",
+    action: "git_push",
+    title: "Git 推送（非 force）",
+    risk: "medium",
+    patterns: [
+      /\bgit\s+push\b/i,
+      /推送.*远程/,
+      /push\s+origin/i,
+    ],
+    examples: ["git push origin feature", "推送到远程"],
+    impact_zh: "可能将本地提交推送到远程，影响团队共享分支。",
+    if_approved_zh: "Agent 将执行 git push（非 force）。请确认分支与提交内容。",
+  },
+  {
+    id: "file_modify",
+    action: "file_modify",
+    title: "修改/写入文件",
+    risk: "medium",
+    patterns: [
+      /修改.*文件/,
+      /写入.*文件/,
+      /覆盖.*文件/,
+      /更新.*代码/,
+      /refactor/i,
+      /重构/,
+    ],
+    examples: ["修改 src/index.ts", "重构组件"],
+    impact_zh: "会改变项目源码或配置，可能引入 bug 或破坏构建。",
+    if_approved_zh: "Agent 将编辑或写入文件。请确认 diff 范围。",
+  },
+  {
+    id: "package_install",
+    action: "package_install",
+    title: "安装依赖",
+    risk: "medium",
+    patterns: [
+      /\bnpm\s+install\b/i,
+      /\bnpm\s+i\b/i,
+      /\bpnpm\s+add\b/i,
+      /\byarn\s+add\b/i,
+      /pip\s+install/i,
+      /安装.*依赖/,
+    ],
+    examples: ["npm install lodash", "pnpm add vue"],
+    impact_zh: "可能改变 lockfile 与 node_modules，引入供应链或版本冲突风险。",
+    if_approved_zh: "Agent 将安装或更新依赖包。",
+  },
+  {
+    id: "read_explore",
+    action: "read_explore",
+    title: "只读探索",
+    risk: "low",
+    patterns: [
+      /解释.*代码/,
+      /帮我看/,
+      /阅读.*文件/,
+      /\bgrep\b/i,
+      /\bsearch\b/i,
+      /搜索.*代码/,
+      /列出.*文件/,
+      /什么是/,
+      /怎么.*工作/,
+    ],
+    examples: ["解释这段代码", "搜索函数定义"],
+    impact_zh: "通常为只读操作，直接副作用较小。",
+    if_approved_zh: "Agent 将读取或分析代码，不预期产生写入副作用。",
+  },
+  {
+    id: "format_lint",
+    action: "format_lint",
+    title: "格式化 / Lint",
+    risk: "low",
+    patterns: [
+      /format/i,
+      /prettier/i,
+      /eslint\s+--fix/i,
+      /格式化/,
+      /lint\s+fix/i,
+    ],
+    examples: ["run prettier", "eslint --fix"],
+    impact_zh: "主要改变代码风格，逻辑风险相对较低。",
+    if_approved_zh: "Agent 将运行格式化或 lint fix。",
+  },
 ];
 
 export interface RiskAssessment {
+  /** @deprecated 使用 gate_required；保留兼容 */
   requires_approval: boolean;
-  risk: RiskLevel | "none";
+  gate_required: boolean;
+  risk: RiskLevelOrNone;
+  risk_tier: number;
+  risk_level_zh: string;
   matched_rules: Array<{
     id: string;
     action: string;
@@ -205,40 +308,28 @@ export interface RiskAssessment {
   }>;
   suggested_action: string;
   rationale: string;
+  context_summary_zh: string;
+  context_factors: string[];
 }
 
-function riskRank(r: RiskLevel | "none"): number {
-  switch (r) {
-    case "critical":
-      return 4;
-    case "high":
-      return 3;
-    case "medium":
-      return 2;
-    case "low":
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-function maxRisk(a: RiskLevel | "none", b: RiskLevel): RiskLevel | "none" {
-  return riskRank(b) > riskRank(a) ? b : a;
-}
+export { requiresGate, formatRiskTierZh, type RiskLevelOrNone };
 
 /**
- * Assess whether text / action looks dangerous per built-in catalog.
+ * Assess user intent + optional code context per built-in catalog.
+ * Only 高危险 / 致命危险 (high / critical) trigger gate_required.
  */
 export function assessRisk(input: {
   intent: string;
   action?: string;
+  params?: Record<string, unknown>;
+  code_context?: CodeContextInput;
 }): RiskAssessment {
-  const hay = `${input.action ?? ""}\n${input.intent}`.trim();
+  const { haystack, context_summary_zh } = buildAssessmentText(input);
   const matched: RiskAssessment["matched_rules"] = [];
-  let top: RiskLevel | "none" = "none";
+  let top: RiskLevelOrNone = "none";
 
   for (const rule of DANGEROUS_OP_RULES) {
-    const hit = rule.patterns.some((p) => p.test(hay));
+    const hit = rule.patterns.some((p) => p.test(haystack));
     if (!hit) continue;
     matched.push({
       id: rule.id,
@@ -264,19 +355,35 @@ export function assessRisk(input: {
     }
   }
 
-  const requires = top === "high" || top === "critical" || top === "medium";
+  const { risk: adjusted, context_factors } = adjustRiskByContext(top, {
+    haystack,
+    code_context: input.code_context,
+  });
+  top = adjusted;
+
+  const gate_required = requiresGate(top);
   const suggested =
-    matched[0]?.action ??
-    (input.action?.trim() || "unspecified_sensitive_action");
+    matched.sort((a, b) => riskRank(b.risk) - riskRank(a.risk))[0]?.action ??
+    (input.action?.trim() || "unspecified_action");
+
+  const rationale =
+    top === "none"
+      ? "未命中内置规则；结合上下文评估为无危险，无需 HITL 审批。"
+      : gate_required
+        ? `评估为${formatRiskTierZh(top)}，命中 ${matched.length} 条规则，需 HITL 审批。`
+        : `评估为${formatRiskTierZh(top)}，Agent 可自行继续但应谨慎；无需 HITL 审批。`;
 
   return {
-    requires_approval: requires,
+    requires_approval: gate_required,
+    gate_required,
     risk: top,
+    risk_tier: riskRank(top),
+    risk_level_zh: formatRiskTierZh(top),
     matched_rules: matched,
     suggested_action: suggested,
-    rationale: requires
-      ? `Matched ${matched.length} built-in rule(s): ${matched.map((m) => m.id).join(", ")}`
-      : "No built-in dangerous-operation rule matched. Proceed without HITL gate (still use judgment).",
+    rationale,
+    context_summary_zh,
+    context_factors,
   };
 }
 

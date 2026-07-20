@@ -1,4 +1,5 @@
 import type { ApprovalTicket, ApprovalStatus } from "./types.js";
+import { formatRiskDisplay, type RiskLevelOrNone } from "./riskLabels.js";
 
 const STATUS_ZH: Record<ApprovalStatus, string> = {
   pending: "待审批",
@@ -83,7 +84,7 @@ export function toHistoryTableRow(ticket: ApprovalTicket): HistoryTableRow {
     ticket_id: ticket.ticket_id,
     action: ticket.action,
     summary: truncate(ticket.summary, 40),
-    risk: ticket.risk,
+    risk: formatRiskDisplay(ticket.risk as RiskLevelOrNone),
     requester: ticket.requester?.trim() || "—",
     approver: formatDecidedBy(ticket.decided_by),
     status: STATUS_ZH[ticket.status] ?? ticket.status,

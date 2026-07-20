@@ -90,9 +90,11 @@ npm run build
 
 ### 危险操作审批
 
-1. Agent 在副作用操作前应调用 **`assess_and_gate`**  
-2. Cursor 弹出审批表单 → 选择「批准并继续」或「拒绝」  
-3. 仅当返回 `ticket.status === "approved"` 时才可继续执行；拒绝/取消则停止  
+1. Agent 在副作用操作前应调用 **`assess_and_gate`**，并传入 **`code_context`**（当前文件、代码片段、将影响的路径等），与 **`intent`** 一并评估  
+2. 返回 **五档风险**：无危险 / 低危险 / 中危险 / 高危险 / 致命危险  
+3. **仅「高危险」「致命危险」**（`gate_required === true`）会弹出审批表单 → 选择「批准并继续」或「拒绝」  
+4. 中/低/无危险不触发 HITL，Agent 可继续但应谨慎  
+5. 仅当返回 `ticket.status === "approved"` 时才可继续执行；拒绝/取消则停止  
 
 在对话里随便说「可以」不算正式批准；以工单状态为准。
 
@@ -105,7 +107,7 @@ npm run build
 
 | 工具 | 作用 |
 |------|------|
-| `assess_and_gate` | 风险评估；危险则开单并走 Cursor 审批 |
+| `assess_and_gate` | 结合 intent + code_context 五档风险评估；仅高/致命危险开单审批 |
 | `list_dangerous_ops` | 查看内置危险操作表 |
 | `request_approval` | 手动开单（一般用上面主路径即可） |
 | `get_approval_status` | 查询某张工单状态 |

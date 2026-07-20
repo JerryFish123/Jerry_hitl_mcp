@@ -72,12 +72,12 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "hitl_mcp",
-    version: "0.4.2",
+    version: "0.5.0",
   });
 
   server.tool(
     "assess_and_gate",
-    "BUILTIN POLICY: Assess risk; if dangerous, create a ticket and request approval via IDE form (MCP elicitation) with detailed risk copy. Returns approved/rejected when user decides. Fallback: pending + chat/panel. Call BEFORE side effects. Do NOT execute while pending/rejected.",
+    "Assess user intent + optional code_context; returns 5-tier risk (无/低/中/高/致命). ONLY 高危险 & 致命危险 trigger HITL approval. Agent MUST pass code_context (active file, snippets, affected paths) when evaluating code changes. Call BEFORE side effects.",
     {
       intent: z
         .string()
@@ -86,6 +86,29 @@ async function main(): Promise<void> {
         .string()
         .optional()
         .describe("Optional explicit action id, e.g. delete_files"),
+      code_context: z
+        .object({
+          workspace: z.string().optional(),
+          active_file: z.string().optional(),
+          files: z.array(z.string()).optional(),
+          snippets: z
+            .array(
+              z.object({
+                path: z.string(),
+                content: z.string().optional(),
+                language: z.string().optional(),
+              }),
+            )
+            .optional(),
+          summary: z
+            .string()
+            .optional()
+            .describe("Agent summary of relevant current code / change scope"),
+        })
+        .optional()
+        .describe(
+          "Current code context: combine with intent for risk assessment",
+        ),
       params: z
         .record(z.unknown())
         .optional()
@@ -93,7 +116,7 @@ async function main(): Promise<void> {
       auto_create: z
         .boolean()
         .optional()
-        .describe("Auto-create ticket when risky (default true)"),
+        .describe("Auto-create ticket when gate_required (default true)"),
       ttl_seconds: z.number().int().optional(),
       requester: z.string().optional(),
     },
@@ -105,6 +128,7 @@ async function main(): Promise<void> {
             {
               intent: args.intent,
               action: args.action,
+              code_context: args.code_context,
               params: args.params,
               auto_create: args.auto_create,
               ttl_seconds: args.ttl_seconds,

@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { assessRisk } from "./policy.js";
 import { ApprovalStore } from "./store.js";
 import {
   assessAndGate,
@@ -21,8 +22,36 @@ const store = new ApprovalStore({
 });
 
 const ops = listDangerousOps();
-if (!ops.count || Number(ops.count) < 5) {
+if (!ops.count || Number(ops.count) < 10) {
   throw new Error("dangerous ops catalog too small");
+}
+
+// 五档 + 仅 high/critical 触发闸门
+const mediumPush = assessRisk({
+  intent: "帮我把 feature 分支 git push 到 origin",
+});
+if (mediumPush.risk !== "medium" || mediumPush.gate_required) {
+  throw new Error("git push should be medium without gate");
+}
+if (mediumPush.risk_level_zh !== "中危险") {
+  throw new Error("risk_level_zh mismatch for medium");
+}
+
+const safe = assessRisk({ intent: "帮我解释一下什么是 HITL" });
+if (safe.gate_required || safe.risk_tier > 2) {
+  throw new Error("explain intent should be low/none without gate");
+}
+
+const ctxDelete = assessRisk({
+  intent: "删除这个 env 文件",
+  code_context: {
+    active_file: "/proj/.env",
+    files: [".env"],
+    summary: "当前打开的是含 API_KEY 的 .env",
+  },
+});
+if (!ctxDelete.gate_required || ctxDelete.risk_tier < 4) {
+  throw new Error("delete .env with context should gate");
 }
 
 // assess + auto gate (no mcp → pending fallback, no elicitation)
@@ -30,24 +59,32 @@ const gated = await assessAndGate(store, {
   intent: "帮我把仓库里的 .env 都删掉",
   action: "delete_files",
   params: { dry_run: true },
+  code_context: { files: [".env"] },
   requester: "smoke-assess",
 });
-const assessment = gated.assessment as { requires_approval: boolean; risk: string };
-if (!assessment.requires_approval) {
-  throw new Error("expected .env delete to require approval");
+const assessment = gated.assessment as {
+  gate_required: boolean;
+  risk: string;
+  risk_level_zh: string;
+};
+if (!assessment.gate_required) {
+  throw new Error("expected .env delete to require gate");
+}
+if (assessment.risk_level_zh !== "高危险" && assessment.risk_level_zh !== "致命危险") {
+  throw new Error("expected high/critical tier for delete .env");
 }
 const ticket = gated.ticket as { ticket_id: string; status: string };
 if (!ticket?.ticket_id || ticket.status !== "pending") {
   throw new Error("expected auto-created pending ticket");
 }
-console.log("assess_and_gate", ticket.ticket_id, assessment.risk);
+console.log("assess_and_gate", ticket.ticket_id, assessment.risk_level_zh);
 
-const safe = await assessAndGate(store, {
+const safeGate = await assessAndGate(store, {
   intent: "帮我解释一下什么是 HITL",
   auto_create: true,
 });
-const safeA = safe.assessment as { requires_approval: boolean };
-if (safeA.requires_approval || safe.ticket) {
+const safeA = safeGate.assessment as { gate_required: boolean };
+if (safeA.gate_required || safeGate.ticket) {
   throw new Error("safe intent should not create ticket");
 }
 
