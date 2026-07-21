@@ -1,6 +1,6 @@
 {
   "name": "hitl-gate-mcp",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Human-in-the-Loop approval gate MCP for Cursor and VS Code (elicitation + init hooks)",
   "type": "module",
   "license": "MIT",

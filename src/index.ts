@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   const server = new McpServer(
     {
       name: "hitl_mcp",
-      version: "0.8.1",
+      version: "0.8.2",
     },
     { instructions: SERVER_INSTRUCTIONS },
   );
@@ -334,7 +334,7 @@ if (argv[0] === "--help" || argv[0] === "-h") {
   --help        Show help
 
 Typical setup (Cursor + VS Code):
-  1) Add hitl_mcp to IDE MCP config (npx -y hitl-gate-mcp)
+  1) Add hitl_mcp to IDE MCP config (see README; macOS Cursor: /bin/zsh -lic)
   2) hitl-gate-mcp init          # --client all (default)
 `);
   process.exit(0);

@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "hitl_mcp": {
-      "command": "npx",
-      "args": ["-y", "hitl-gate-mcp"],
+      "command": "/bin/zsh",
+      "args": ["-lic", "npx -y hitl-gate-mcp"],
       "env": {
         "HITL_ELICIT": "1",
         "HITL_ENABLE_PANEL": "0"

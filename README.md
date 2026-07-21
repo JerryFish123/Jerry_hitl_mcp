@@ -13,16 +13,16 @@
 
 ### ① 配置 MCP（让工具连上）
 
-两边都用同一进程：`npx -y hitl-gate-mcp`。差异只在配置文件路径/字段名。
+两边最终都跑：`npx -y hitl-gate-mcp`。差异只在配置文件路径。
 
-**Cursor** — `.cursor/mcp.json`（或 Cursor Settings → MCP）：
+**Cursor（macOS 推荐，复制即用）** — `.cursor/mcp.json`：
 
 ```json
 {
   "mcpServers": {
     "hitl_mcp": {
-      "command": "npx",
-      "args": ["-y", "hitl-gate-mcp"],
+      "command": "/bin/zsh",
+      "args": ["-lic", "npx -y hitl-gate-mcp"],
       "env": {
         "HITL_ELICIT": "1",
         "HITL_ENABLE_PANEL": "0"
@@ -32,7 +32,10 @@
 }
 ```
 
-**VS Code** — `.vscode/mcp.json`（或用户 MCP 设置；字段多为 `servers`）：
+> 用登录 shell 启动，自动带上 nvm / Homebrew 的 Node，**不必写绝对路径**。  
+> 若写裸 `"command": "npx"`，Cursor 从图标启动时经常报 `spawn npx ENOENT`。
+
+**VS Code** — `.vscode/mcp.json`：
 
 ```json
 {
@@ -50,13 +53,11 @@
 }
 ```
 
-也可参考包内示例（`init` 会拷到项目里）：
+VS Code 若同样 `ENOENT`，把 `command`/`args` 改成与上面 Cursor 相同的 `/bin/zsh` + `-lic` 写法即可。
 
-- Cursor：`.cursor/mcp.json.example`
-- VS Code：`.vscode/mcp.json.example`
+`init` 也会生成示例：`.cursor/mcp.json.example`、`.vscode/mcp.json.example`。
 
-保存后确认 `hitl_mcp` 已连接。  
-连接后 Client 会收到 Server **`instructions`**（软提醒：副作用前先 `assess_and_gate`）。
+保存后在 MCP 面板确认 `hitl_mcp` 已连接。
 
 ### ② 手动 init（装上硬约束，提高遵从率）
 
